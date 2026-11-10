@@ -92,6 +92,39 @@ devine-utils-ci all --output toon
 | `test-report` | JUnit XML report. |
 | `all` | The whole quality gate, in CI order. |
 
+### Version and release
+
+| Command | What it does |
+|---------|--------------|
+| `version-check` | `VERSION`, `Cargo.toml` and the git tag must agree. |
+| `bump-version` | Bump the version: `patch` \| `minor` \| `major` \| `rc` \| `promote`. |
+| `release-check` | The gate that runs before a release is cut. |
+| `release-start` | Create the release branch and the bump commit. |
+| `release-finish` | Tag the merged release and push the tag. |
+
+### Repository
+
+| Command | What it does |
+|---------|--------------|
+| `doctor` | Report the toolchain and the project layout. |
+| `repo-status` | Branch, head, dirty paths and recent commits. |
+| `cleanup` | Remove the build artifacts (`--dry-run` only shows them). |
+| `report-bundle` | Collect the reports of a CI run into one directory. |
+| `verify-dist` | Check the release artifacts against `SHA256SUMS`. |
+
+### More checks
+
+| Command | What it does |
+|---------|--------------|
+| `ci-lint`, `glab-ci-lint` | Validate the GitLab CI pipeline file; skips when there is none. |
+| `arch` | Dependency cycles and layer direction. |
+| `buf-lint` | The proto naming conventions. |
+| `web-lint` | Syntax sanity for the front-end sources. |
+
+Every command accepts `--output json` or `--output toon` where it reports
+findings, and every command exits `0` on success, `1` on a failed check or an
+unknown flag, and `1` for an unknown subcommand.
+
 ## Global flags
 
 | Flag | Default | Meaning |
@@ -184,19 +217,35 @@ src/
 ├── rustgate/        # The Rust-specific gates
 └── commands/        # Subcommand wiring
 ```
+├── gates/           # The language-agnostic quality gates
+├── rustgate/        # The Rust-specific gates (toolchain, scanner, source)
+├── commands/        # Subcommand wiring, one module per command family
+├── git.rs           # Read-only git plumbing for status/release commands
+├── version.rs       # Version parsing and the bump arithmetic
+├── static_regex.rs  # The one place a `Regex` may be built statically
+└── tests/cli.rs     # End-to-end tests that drive the compiled binary
+```
 
 ## Development
 
 ```sh
-make build          # cargo build
-make test           # cargo test
+make build          # cargo build --all-targets
+make test           # cargo test --all-targets
 make lint           # fmt + clippy
 make gate           # run the tool against this repository
 make blaze-build    # build with blaze
+make blaze-test     # run the tests with blaze
 ```
 
 The repository dogfoods the tool: `make gate` runs every gate against this
-repository and must stay green.
+repository and must stay green. In particular the source budget is 300/450
+lines and the complexity budget is 12/18 (see `.devine-utils-ci.jsonc`), both
+tighter than the built-in defaults.
+
+`scripts/blaze.sh` wraps `blaze` and restarts its daemon with
+`BLAZE_SANDBOX=off`, because container images that block
+`unshare(CLONE_NEWUSER)` otherwise fail every build with
+`/proc/self/setgroups: Permission denied`.
 
 ## Licence
 

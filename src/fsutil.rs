@@ -21,6 +21,7 @@ pub const SKIP_DIRS: &[&str] = &[
     "coverage",
     "out",
     "bin",
+    "reports",
     ".git",
     ".cache",
     ".turbo",

@@ -9,11 +9,22 @@
 //! build tool itself is [blaze](https://github.com/indexable-inc/blaze),
 //! which answers `build`, `check`, `run`, `test` and `clippy`; when it is not
 //! installed the gate falls back to `cargo`.
+//!
+//! The two drivers do not accept the same flags, so [`adapt_args`] rewrites
+//! cargo's command line for blaze before the process starts.
 
 use std::path::Path;
+use std::process::Stdio;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use crate::runner::Runner;
+
+/// Wall-clock budget for one cargo/blaze invocation.
+const TOOL_TIMEOUT: Duration = Duration::from_secs(1800);
+
+/// Budget for stopping a daemon that has to be restarted.
+const STOP_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// The build driver to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,13 +65,7 @@ pub fn detect_driver(root: &Path) -> Driver {
 }
 
 fn has_cargo_toml(root: &Path) -> bool {
-    if root.join("Cargo.toml").is_file() {
-        return true;
-    }
-    std::fs::read_to_string(root.join("Cargo.toml"))
-        .ok()
-        .map(|_| true)
-        .unwrap_or(false)
+    root.join("Cargo.toml").is_file()
 }
 
 /// Whether the driver can run the given subcommand.
@@ -72,6 +77,75 @@ pub fn supports(driver: Driver, subcommand: &str) -> bool {
             "build" | "check" | "run" | "test" | "clippy" | "fmt" | "doc" | "tree" | "metadata"
         ),
     }
+}
+
+/// Rewrites cargo's flags into the set the driver accepts.
+///
+/// cargo builds every target and lets rustdoc lint the documentation. blaze
+/// builds the default programs only, and writes documentation from its own
+/// reading of the source with no rustdoc to receive flags, so it takes
+/// neither `--all-targets` nor `--no-deps`. It does accept clippy's flags,
+/// so those stay as they are.
+pub fn adapt_args<'a>(driver: Driver, subcommand: &'a str, args: &'a [&'a str]) -> Vec<&'a str> {
+    match driver {
+        Driver::Cargo => args.to_vec(),
+        Driver::Blaze => match subcommand {
+            "build" | "test" => args
+                .iter()
+                .copied()
+                .filter(|arg| *arg != "--all-targets")
+                .collect(),
+            "doc" => Vec::new(),
+            _ => args.to_vec(),
+        },
+    }
+}
+
+/// The complete command line for one invocation.
+fn command_line<'a>(driver: Driver, subcommand: &'a str, args: &'a [&'a str]) -> Vec<&'a str> {
+    let adapted = adapt_args(driver, subcommand, args);
+    let mut all = Vec::with_capacity(adapted.len() + 1);
+    all.push(subcommand);
+    all.extend(adapted);
+    all
+}
+
+/// Whether blaze should run without its namespace sandbox.
+///
+/// An explicit `BLAZE_SANDBOX` always wins. Otherwise the sandbox is turned
+/// off when this container refuses the user namespaces blaze would isolate
+/// each build in, because a daemon started with a sandbox it cannot create
+/// fails every later build too.
+pub fn sandbox_off() -> bool {
+    match std::env::var("BLAZE_SANDBOX").as_deref() {
+        Ok(value) => value == "off",
+        Err(_) => !user_namespace_works(),
+    }
+}
+
+/// Whether this machine lets a process map itself into a user namespace.
+///
+/// The probe runs once: it spawns `unshare`, which reports the same refusal
+/// the blaze daemon would meet.
+fn user_namespace_works() -> bool {
+    static WORKS: OnceLock<bool> = OnceLock::new();
+    *WORKS.get_or_init(|| {
+        std::process::Command::new("unshare")
+            .args(["--user", "--map-root-user", "true"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|status| status.success())
+            // Without `unshare` there is nothing to probe with, so give the
+            // daemon the benefit of the doubt and let its own error decide.
+            .unwrap_or(true)
+    })
+}
+
+/// Whether the output is blaze complaining about its sandbox, not the build.
+fn sandbox_failure(output: &str) -> bool {
+    output.contains("setgroups") || output.contains("uid_map")
 }
 
 /// The result of running a cargo/blaze subcommand.
@@ -99,15 +173,36 @@ pub fn run(
             driver.program()
         ));
     }
-    let runner = Runner::new(root, verbose);
-    let mut all: Vec<&str> = vec![subcommand];
-    all.extend_from_slice(args);
-    let out = runner.run_with_timeout(Duration::from_secs(1800), driver.program(), &all)?;
-    Ok(ToolResult {
+    let mut runner = Runner::new(root, verbose);
+    let mut restart_daemon = false;
+    if driver == Driver::Blaze && sandbox_off() {
+        runner = runner.with_env("BLAZE_SANDBOX", "off");
+        restart_daemon = true;
+    }
+    if driver == Driver::Cargo && subcommand == "doc" {
+        // `cargo doc` has no `-- -D` passthrough, so rustdoc reads its lint
+        // flags from the environment instead.
+        runner = runner.with_env("RUSTDOCFLAGS", "-D rustdoc::broken_intra_doc_links");
+    }
+    let all = command_line(driver, subcommand, args);
+    let out = runner.run_with_timeout(TOOL_TIMEOUT, driver.program(), &all)?;
+    if restart_daemon && !out.success && sandbox_failure(&out.output) {
+        // A daemon keeps the sandbox it started with, so the only way the
+        // new setting takes effect is to stop it and let the next build
+        // start one that honours `BLAZE_SANDBOX=off`.
+        let _ = runner.run_with_timeout(STOP_TIMEOUT, "blaze", &["stop"]);
+        let retried = runner.run_with_timeout(TOOL_TIMEOUT, driver.program(), &all)?;
+        return Ok(as_tool_result(retried));
+    }
+    Ok(as_tool_result(out))
+}
+
+fn as_tool_result(out: crate::runner::CmdOutput) -> ToolResult {
+    ToolResult {
         success: out.success,
         output: out.output,
         code: out.code,
-    })
+    }
 }
 
 /// Runs a cargo subcommand and reports a friendly error when the toolchain is
@@ -132,21 +227,4 @@ pub fn run_or_missing(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn driver_can_be_forced_by_the_environment() {
-        // The default resolution must never pick a driver that is missing.
-        let driver = detect_driver(Path::new("/nonexistent-root-for-tests"));
-        assert!(matches!(driver, Driver::Cargo | Driver::Blaze));
-    }
-
-    #[test]
-    fn blaze_supports_only_its_own_subcommands() {
-        assert!(supports(Driver::Blaze, "build"));
-        assert!(supports(Driver::Blaze, "clippy"));
-        assert!(!supports(Driver::Blaze, "install"));
-        assert!(supports(Driver::Cargo, "install"));
-    }
-}
+mod tests;

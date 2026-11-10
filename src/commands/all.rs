@@ -7,6 +7,9 @@
 //! The order mirrors the Go original: install, lint, test, build, coverage,
 //! then the static gates. Any step that fails stops the run and the command
 //! exits non-zero — there is no way to bypass a failing gate.
+//!
+//! A Rust project has no Go toolchain, so the aggregate runs the Rust gates
+//! in their place and keeps the same static gates afterwards.
 
 use crate::config::Config;
 use crate::gates;
@@ -20,29 +23,9 @@ pub struct Step {
     pub required: bool,
 }
 
-/// The steps `all` runs, in order.
-pub fn steps() -> Vec<Step> {
+/// The static gates every project runs.
+fn static_steps() -> Vec<Step> {
     vec![
-        Step {
-            name: "install",
-            required: true,
-        },
-        Step {
-            name: "lint",
-            required: true,
-        },
-        Step {
-            name: "test",
-            required: true,
-        },
-        Step {
-            name: "build",
-            required: true,
-        },
-        Step {
-            name: "coverage",
-            required: true,
-        },
         Step {
             name: "sanity",
             required: true,
@@ -70,10 +53,52 @@ pub fn steps() -> Vec<Step> {
     ]
 }
 
+/// The steps `all` runs, in order.
+///
+/// The toolchain steps depend on the language of the project.
+pub fn steps(cfg: &Config) -> Vec<Step> {
+    let mut steps = if is_rust_project(cfg) {
+        vec![Step {
+            name: "rust",
+            required: true,
+        }]
+    } else {
+        vec![
+            Step {
+                name: "install",
+                required: true,
+            },
+            Step {
+                name: "lint",
+                required: true,
+            },
+            Step {
+                name: "test",
+                required: true,
+            },
+            Step {
+                name: "build",
+                required: true,
+            },
+            Step {
+                name: "coverage",
+                required: true,
+            },
+        ]
+    };
+    steps.extend(static_steps());
+    steps
+}
+
+/// Whether the project is a Rust project without a Go module.
+fn is_rust_project(cfg: &Config) -> bool {
+    rustgate::is_rust_project(cfg.root()) && !cfg.root().join("go.mod").exists()
+}
+
 /// Runs the aggregate gate and returns the exit code.
 pub fn run(cfg: &Config) -> Result<i32, String> {
     let mut failures: Vec<String> = Vec::new();
-    for step in steps() {
+    for step in steps(cfg) {
         println!("── {} ──", step.name);
         let outcome = run_step(cfg, step.name);
         match outcome {
@@ -102,6 +127,7 @@ pub fn run(cfg: &Config) -> Result<i32, String> {
     }
 }
 
+/// Runs one step of the aggregate gate.
 fn run_step(cfg: &Config, name: &str) -> Result<i32, String> {
     match name {
         "install" => crate::commands::toolchain::install(cfg),
@@ -109,6 +135,7 @@ fn run_step(cfg: &Config, name: &str) -> Result<i32, String> {
         "test" => crate::commands::toolchain::test(cfg),
         "build" => crate::commands::toolchain::build(cfg),
         "coverage" => crate::commands::toolchain::coverage(cfg),
+        "rust" => run_rust(cfg),
         other => {
             let result = run_gate(cfg, other)?;
             Ok(gates::emit(cfg, &result))
@@ -116,6 +143,7 @@ fn run_step(cfg: &Config, name: &str) -> Result<i32, String> {
     }
 }
 
+/// Runs one static gate.
 fn run_gate(cfg: &Config, name: &str) -> Result<gates::GateResult, String> {
     match name {
         "sanity" => gates::sanity::run(cfg),

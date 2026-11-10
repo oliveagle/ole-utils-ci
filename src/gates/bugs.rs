@@ -16,6 +16,7 @@ use crate::config::Config;
 use crate::fsutil::{self, Entry};
 use crate::gates::GateResult;
 use crate::output::{Diagnostic, Report};
+use crate::static_regex;
 
 /// The markers the gate looks for.
 pub const MARKERS: [&str; 4] = ["BUG", "FIXME", "HACK", "XXX"]; //nolint:bugs
@@ -37,7 +38,7 @@ pub struct BugFinding {
 /// Builds the regex that matches a marker on a word boundary.
 fn marker_regex() -> Regex {
     let pattern = format!(r"\b({})\b", MARKERS.join("|"));
-    Regex::new(&pattern).expect("static marker regex must compile")
+    static_regex::compile(&pattern)
 }
 
 /// Whether the line carries a `nolint` comment that skips this gate.
@@ -136,7 +137,7 @@ pub fn text_body(result: &GateResult, total_files: usize) -> String {
     for d in &result.report.diagnostics {
         body.push_str(&format!("  {}:{}: found {}\n", d.path, d.line, d.rule));
     }
-    body.push_str("\n");
+    body.push('\n');
     body.push_str("═══ REQUIRED REMEDIATION (MANDATORY - DO NOT BYPASS) ═══\n");
     body.push_str(&format!(
         "  {} markers MUST be resolved immediately:\n",

@@ -9,6 +9,7 @@ use std::process::ExitCode;
 
 use devine_utils_ci::commands;
 use devine_utils_ci::config::Config;
+use devine_utils_ci::version;
 
 /// The commands that need nothing but the global flags.
 const GATE_COMMANDS: [&str; 12] = [
@@ -116,38 +117,52 @@ fn dispatch(command: &str, args: &[String]) -> Result<i32, String> {
         return commands::rust::run(command, &cfg);
     }
     match command {
-        "install" => {
-            commands::gates::parse(&mut cfg, args)?;
-            commands::toolchain::install(&cfg)
-        }
-        "lint" => {
-            commands::gates::parse(&mut cfg, args)?;
-            commands::toolchain::lint(&cfg)
-        }
-        "test" => {
-            commands::gates::parse(&mut cfg, args)?;
-            commands::toolchain::test(&cfg)
-        }
-        "build" => {
-            commands::gates::parse(&mut cfg, args)?;
-            commands::toolchain::build(&cfg)
-        }
-        "coverage" => {
-            commands::gates::parse(&mut cfg, args)?;
-            commands::toolchain::coverage(&cfg)
-        }
-        "test-report" => {
-            commands::gates::parse(&mut cfg, args)?;
-            commands::toolchain::test_report(&cfg)
-        }
-        "all" => {
-            commands::gates::parse(&mut cfg, args)?;
-            commands::all::run(&cfg)
-        }
+        "install" => with_config(commands::toolchain::install, &mut cfg, args),
+        "lint" => with_config(commands::toolchain::lint, &mut cfg, args),
+        "test" => with_config(commands::toolchain::test, &mut cfg, args),
+        "build" => with_config(commands::toolchain::build, &mut cfg, args),
+        "coverage" => with_config(commands::toolchain::coverage, &mut cfg, args),
+        "test-report" => with_config(commands::toolchain::test_report, &mut cfg, args),
+        "all" => with_config(commands::all::run, &mut cfg, args),
+        "version-check" => with_config(commands::version::version_check, &mut cfg, args),
+        "release-check" => with_config(commands::version::release_check, &mut cfg, args),
+        "release-finish" => with_config(commands::version::release::release_finish, &mut cfg, args),
+        "doctor" => with_config(commands::doctor::doctor, &mut cfg, args),
+        "repo-status" => with_config(commands::repo::repo_status, &mut cfg, args),
+        "cleanup" => with_config(commands::repo::cleanup, &mut cfg, args),
+        "ci-lint" | "glab-ci-lint" => with_config(commands::ci::ci_lint, &mut cfg, args),
+        "arch" => with_config(commands::arch::arch, &mut cfg, args),
+        "buf-lint" => with_config(commands::proto::buf_lint, &mut cfg, args),
+        "web-lint" => with_config(commands::web::web_lint, &mut cfg, args),
+        "report-bundle" => with_config(commands::reports::report_bundle, &mut cfg, args),
+        "verify-dist" => with_config(commands::dist::verify_dist, &mut cfg, args),
+        "bump-version" => bump_command(&mut cfg, args, false),
+        "release-start" => bump_command(&mut cfg, args, true),
         other => Err(format!("unknown command: {other}")),
     }
 }
 
+/// Parses the global flags for a command, then runs it.
+fn with_config(
+    run: fn(&Config) -> Result<i32, String>,
+    cfg: &mut Config,
+    args: &[String],
+) -> Result<i32, String> {
+    commands::gates::parse(cfg, args)?;
+    run(cfg)
+}
+
+/// Parses the bump type for `bump-version` and `release-start`.
+fn bump_command(cfg: &mut Config, args: &[String], release: bool) -> Result<i32, String> {
+    let rest = commands::gates::parse(cfg, args)?;
+    let raw = rest.first().map(String::as_str).unwrap_or("");
+    let bump = version::parse_bump(raw)?;
+    if release {
+        commands::version::release::release_start(cfg, bump)
+    } else {
+        commands::version::bump::bump_version(cfg, bump)
+    }
+}
 fn print_usage() {
     let markers = devine_utils_ci::gates::bugs::MARKERS.join(" / ");
     print!(
@@ -191,6 +206,27 @@ Go toolchain:
   coverage             Line coverage against the threshold.
   test-report          JUnit XML report.
   all                  The whole quality gate.
+
+Version and release:
+  version-check        VERSION, Cargo.toml and the git tag must agree.
+  bump-version         Bump the version: patch|minor|major|rc|promote.
+  release-check        The gate that runs before a release.
+  release-start        Create the release branch and the bump commit.
+  release-finish       Tag the merged release and push the tag.
+
+Repository:
+  doctor               Report the toolchain and the project layout.
+  repo-status          Branch, head, dirty paths and recent commits.
+  cleanup              Remove the build artifacts.
+  report-bundle        Collect the reports of a CI run into one directory.
+  verify-dist          Check the release artifacts against SHA256SUMS.
+
+More checks:
+  ci-lint              Validate the GitLab CI pipeline file.
+  glab-ci-lint         Alias of ci-lint.
+  arch                 Dependency cycles and layer direction.
+  buf-lint             The proto naming conventions.
+  web-lint             Syntax sanity for the front-end sources.
 
 Global flags:
   --project-root <path>       Repository to check (default: .).

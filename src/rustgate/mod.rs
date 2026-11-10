@@ -19,6 +19,9 @@
 //! | `rust-unsafe` | forbids `unsafe` in production code |
 //! | `rust-panic` | forbids `unwrap`/`expect`/`panic!` in production code |
 //! | `rust` | all of the above |
+//!
+//! The flags above are cargo's; [`toolchain::adapt_args`] rewrites them when
+//! the driver is [blaze](https://github.com/indexable-inc/blaze).
 
 pub mod manifest;
 pub mod scanner;
@@ -135,29 +138,32 @@ pub fn build(cfg: &Config) -> Result<GateResult, String> {
 
 /// The `rust-doc` gate.
 pub fn doc(cfg: &Config) -> Result<GateResult, String> {
-    tool_gate(
-        cfg,
-        "rust-doc",
-        "doc",
-        &["--no-deps", "--", "-D", "rustdoc::broken_intra_doc_links"],
-        "rust/doc",
-    )
+    tool_gate(cfg, "rust-doc", "doc", &["--no-deps"], "rust/doc")
 }
+
+/// One gate: the name it reports under, and the function that runs it.
+type GateRunner = (&'static str, fn(&Config) -> Result<GateResult, String>);
+
+/// Every Rust gate, in the order `rust` runs them.
+const GATE_RUNNERS: [GateRunner; 10] = [
+    ("rust-fmt", fmt),
+    ("rust-manifest", manifest_gate),
+    ("rust-unsafe", unsafe_code),
+    ("rust-panic", panic_free),
+    ("rust-msrv", msrv),
+    ("rust-clippy", clippy),
+    ("rust-build", build),
+    ("rust-test", test),
+    ("rust-doc", doc),
+    ("rust-audit", audit),
+];
 
 /// Runs every Rust gate and returns their combined verdict.
 pub fn run_all(cfg: &Config) -> Result<Vec<(String, GateResult)>, String> {
-    let mut out = Vec::new();
-    out.push(("rust-fmt".to_string(), fmt(cfg)?));
-    out.push(("rust-manifest".to_string(), manifest_gate(cfg)?));
-    out.push(("rust-unsafe".to_string(), unsafe_code(cfg)?));
-    out.push(("rust-panic".to_string(), panic_free(cfg)?));
-    out.push(("rust-msrv".to_string(), msrv(cfg)?));
-    out.push(("rust-clippy".to_string(), clippy(cfg)?));
-    out.push(("rust-build".to_string(), build(cfg)?));
-    out.push(("rust-test".to_string(), test(cfg)?));
-    out.push(("rust-doc".to_string(), doc(cfg)?));
-    out.push(("rust-audit".to_string(), audit(cfg)?));
-    Ok(out)
+    GATE_RUNNERS
+        .into_iter()
+        .map(|(name, run)| Ok((name.to_string(), run(cfg)?)))
+        .collect()
 }
 
 /// Turns findings into diagnostics.

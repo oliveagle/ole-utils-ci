@@ -20,9 +20,10 @@ const SCANNED_EXTENSIONS: [&str; 13] = [
 ];
 
 /// Directories that are never inspected.
-const SKIP_DIRS: [&str; 7] = [
+const SKIP_DIRS: [&str; 8] = [
     "vendor",
     "node_modules",
+    "reports",
     ".git",
     ".codegraph",
     ".omo",

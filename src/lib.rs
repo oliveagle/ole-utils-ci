@@ -14,10 +14,13 @@ pub mod commands;
 pub mod config;
 pub mod fsutil;
 pub mod gates;
+pub mod git;
 pub mod output;
 pub mod quality_config;
 pub mod runner;
 pub mod rustgate;
+pub mod static_regex;
+pub mod version;
 
 /// Version of the tool. Kept in sync with the repository `VERSION` file and
 /// injected at release time by `bump-version`.

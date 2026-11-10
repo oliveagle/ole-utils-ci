@@ -82,7 +82,7 @@ pub fn matching_path_rule<'a>(
     rel: &str,
 ) -> Option<&'a crate::quality_config::QualityFileLengthRule> {
     let mut patterns: Vec<&String> = rules.keys().collect();
-    patterns.sort_by(|a, b| b.len().cmp(&a.len()));
+    patterns.sort_by_key(|a| std::cmp::Reverse(a.len()));
     patterns
         .into_iter()
         .find(|p| crate::quality_config::match_glob_pattern(rel, p))

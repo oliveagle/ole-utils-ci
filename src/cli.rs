@@ -182,17 +182,22 @@ impl FlagSet {
     }
 
     /// Parses `argv`, filling in registered flags and collecting positionals.
+    ///
+    /// A flag may come before or after the positionals: `bump-version patch
+    /// --dry-run` has to reach the same configuration as the other order.
     pub fn parse(&mut self, argv: &[String]) -> Result<(), ParseError> {
+        let mut positionals: Vec<String> = Vec::new();
         let mut i = 0;
         while i < argv.len() {
             let arg = &argv[i];
             if arg == "--" {
-                self.args.extend_from_slice(&argv[i + 1..]);
-                return Ok(());
+                positionals.extend_from_slice(&argv[i + 1..]);
+                break;
             }
             if !is_flag(arg) {
-                self.args.extend_from_slice(&argv[i..]);
-                return Ok(());
+                positionals.push(arg.clone());
+                i += 1;
+                continue;
             }
             let (raw_name, inline) = split_flag(arg);
             let name = self.resolve(&raw_name);
@@ -204,12 +209,8 @@ impl FlagSet {
             match kind {
                 FlagKind::Bool => {
                     let raw = inline.unwrap_or_else(|| "true".to_string());
-                    let parsed = raw.parse::<bool>().map_err(|e| ParseError::InvalidValue {
-                        name: name.clone(),
-                        value: raw.clone(),
-                        reason: e.to_string(),
-                    })?;
-                    self.values.insert(name, FlagValue::Bool(parsed));
+                    let value = self.coerce(&name, kind, raw)?;
+                    self.values.insert(name, value);
                 }
                 _ => {
                     let raw = match inline {
@@ -227,6 +228,7 @@ impl FlagSet {
             }
             i += 1;
         }
+        self.args = positionals;
         Ok(())
     }
 
@@ -248,7 +250,14 @@ impl FlagSet {
                     .filter(|s| !s.is_empty())
                     .collect(),
             )),
-            FlagKind::Bool => unreachable!("booleans are handled by the caller"),
+            FlagKind::Bool => match raw.parse::<bool>() {
+                Ok(value) => Ok(FlagValue::Bool(value)),
+                Err(e) => Err(ParseError::InvalidValue {
+                    name: name.to_string(),
+                    value: raw,
+                    reason: e.to_string(),
+                }),
+            },
         }
     }
 }

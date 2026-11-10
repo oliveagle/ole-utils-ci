@@ -8,15 +8,14 @@
 //! The check is skipped when the Go toolchain is not installed, so the gate
 //! never blocks a machine that does not build Go code.
 
-use regex::Regex;
-
 use crate::config::Config;
 use crate::gates::GateResult;
 use crate::output::{Diagnostic, Report};
+use crate::static_regex;
 
 /// The `go x.y` directive in a `go.mod`.
 pub fn go_directive(content: &str) -> Option<String> {
-    let re = Regex::new(r"(?m)^go\s+(\d+\.\d+(?:\.\d+)?)").expect("static go regex must compile");
+    let re = static_regex::compile(r"(?m)^go\s+(\d+\.\d+(?:\.\d+)?)");
     re.captures(content)
         .and_then(|c| c.get(1))
         .map(|m| m.as_str().to_string())
@@ -29,7 +28,7 @@ pub fn runtime_version() -> Option<String> {
         .output()
         .ok()?;
     let text = String::from_utf8_lossy(&output.stdout);
-    let re = Regex::new(r"go(\d+\.\d+(?:\.\d+)?)").expect("static version regex must compile");
+    let re = static_regex::compile(r"go(\d+\.\d+(?:\.\d+)?)");
     re.captures(&text)
         .and_then(|c| c.get(1))
         .map(|m| m.as_str().to_string())
@@ -90,7 +89,9 @@ pub fn text_body(result: &GateResult) -> String {
     for d in &result.report.diagnostics {
         body.push_str(&format!("  ✗ {}: {}\n", d.path, d.message));
     }
-    if result.passed() {
+    if let Some(line) = crate::gates::skipped_line(&result.report.summary) {
+        body.push_str(&line);
+    } else if result.passed() {
         body.push_str("✅ Go version matches go.mod\n");
     } else {
         body.push_str("✗ Go version mismatch\n");

@@ -10,6 +10,7 @@
 //! hung toolchain fails the gate instead of hanging CI.
 
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -34,9 +35,9 @@ pub struct Runner {
     pub dir: PathBuf,
     /// Print each command before running it.
     pub verbose: bool,
+    /// Extra environment variables for every command this runner starts.
+    pub env: Vec<(String, String)>,
 }
-
-use std::path::PathBuf;
 
 impl Runner {
     /// Creates a runner for `dir`.
@@ -44,7 +45,18 @@ impl Runner {
         Runner {
             dir: dir.into(),
             verbose,
+            env: Vec::new(),
         }
+    }
+
+    /// Adds one environment variable to every command this runner starts.
+    ///
+    /// `blaze` reads its sandbox mode when the daemon starts, so the gates
+    /// push `BLAZE_SANDBOX=off` through here when the container blocks the
+    /// user namespaces the daemon would otherwise isolate itself in.
+    pub fn with_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.env.push((key.into(), value.into()));
+        self
     }
 
     /// Runs a command, capturing stdout and stderr together.
@@ -70,6 +82,9 @@ impl Runner {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        for (key, value) in &self.env {
+            cmd.env(key, value);
+        }
         let mut child = cmd
             .spawn()
             .map_err(|e| format!("{program} {} failed: {e}", args.join(" ")))?;
@@ -137,9 +152,12 @@ impl Runner {
         if self.verbose {
             println!("[exec] {program} {}", args.join(" "));
         }
-        let status = Command::new(program)
-            .args(args)
-            .current_dir(&self.dir)
+        let mut cmd = Command::new(program);
+        cmd.args(args).current_dir(&self.dir);
+        for (key, value) in &self.env {
+            cmd.env(key, value);
+        }
+        let status = cmd
             .status()
             .map_err(|e| format!("{program} {} failed: {e}", args.join(" ")))?;
         if status.success() {
@@ -204,5 +222,14 @@ mod tests {
             .unwrap_err();
         assert!(err.contains("boom"));
         assert!(err.contains("exit code 3"));
+    }
+
+    #[test]
+    fn passes_extra_environment_to_the_child() {
+        let r = Runner::new(".", false).with_env("DEVINE_UTILS_CI_PROBE", "yes");
+        let out = r
+            .run("sh", &["-c", "printf '%s' \"$DEVINE_UTILS_CI_PROBE\""])
+            .unwrap();
+        assert_eq!(out, "yes");
     }
 }

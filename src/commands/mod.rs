@@ -8,9 +8,18 @@
 //! shared global flags live in [`crate::config`].
 
 pub mod all;
+pub mod arch;
+pub mod ci;
+pub mod dist;
+pub mod doctor;
 pub mod gates;
+pub mod proto;
+pub mod repo;
+pub mod reports;
 pub mod rust;
 pub mod toolchain;
+pub mod version;
+pub mod web;
 
 use crate::cli::FlagSet;
 use crate::config::Config;

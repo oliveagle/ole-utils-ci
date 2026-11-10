@@ -98,10 +98,16 @@ pub fn scan(root: &Path, rules: &[Rule]) -> Vec<RustFinding> {
 pub fn is_test_file(rel: &str) -> bool {
     let name = rel.rsplit('/').next().unwrap_or(rel);
     let in_test_dir = rel.split('/').next() == Some("tests");
-    name.starts_with("test_") || name.ends_with("_test.rs") || in_test_dir
+    let named_like_a_test =
+        name == "tests.rs" || name.starts_with("test_") || name.ends_with("_test.rs");
+    named_like_a_test || in_test_dir
 }
 
 /// Scans one source text for the given rules.
+///
+/// Comments are prose, so a rule never fires on a line that only mentions
+/// what it forbids. A line may also opt out with `//nolint`, which skips
+/// every rule, or `//nolint:rust/expect`, which skips one.
 pub fn scan_source(path: &str, source: &str, rules: &[Rule]) -> Vec<RustFinding> {
     let mut findings = Vec::new();
     let mut in_test_module = false;
@@ -110,11 +116,11 @@ pub fn scan_source(path: &str, source: &str, rules: &[Rule]) -> Vec<RustFinding>
         if trimmed.starts_with("#[cfg(test)]") {
             in_test_module = true;
         }
-        if in_test_module {
+        if in_test_module || trimmed.starts_with("//") {
             continue;
         }
         for rule in rules {
-            if !matches_rule(trimmed, *rule) {
+            if !matches_rule(trimmed, *rule) || has_nolint_skip(trimmed, *rule) {
                 continue;
             }
             findings.push(RustFinding {
@@ -128,24 +134,45 @@ pub fn scan_source(path: &str, source: &str, rules: &[Rule]) -> Vec<RustFinding>
     findings
 }
 
+/// Whether the line carries a `nolint` comment that skips `rule`.
+fn has_nolint_skip(line: &str, rule: Rule) -> bool {
+    let Some(index) = line.find("//") else {
+        return false;
+    };
+    let comment = line[index + 2..].trim_start();
+    let Some(rest) = comment.strip_prefix("nolint") else {
+        return false;
+    };
+    let ids = rest.trim_start_matches(':').trim();
+    if ids.is_empty() {
+        return true;
+    }
+    ids.split(',').any(|id| id.trim() == rule.id())
+}
+
+/// Whether the line breaks `rule`.
+///
+/// This table names every pattern the gate forbids, so its own lines opt out
+/// with `nolint`: the scanner must be able to describe what it rejects
+/// without rejecting itself.
 fn matches_rule(line: &str, rule: Rule) -> bool {
     match rule {
-        Rule::Unsafe => line.starts_with("unsafe ") || line.contains(" unsafe fn"),
-        Rule::Unwrap => line.contains(".unwrap()"),
-        Rule::Expect => line.contains(".expect("),
+        Rule::Unsafe => line.starts_with("unsafe ") || line.contains(" unsafe fn"), //nolint
+        Rule::Unwrap => line.contains(".unwrap()"),                                 //nolint
+        Rule::Expect => line.contains(".expect("),                                  //nolint
         Rule::PanicMacro => {
-            line.contains("panic!(")
-                || line.contains("unreachable!(")
-                || line.contains("todo!(")
-                || line.contains("unimplemented!(")
+            line.contains("panic!(") //nolint:rust/panic-macro
+                || line.contains("unreachable!(") //nolint:rust/panic-macro
+                || line.contains("todo!(") //nolint:rust/panic-macro
+                || line.contains("unimplemented!(") //nolint:rust/panic-macro
         }
         Rule::DebugMacro => {
-            line.contains("println!(")
-                || line.contains("eprintln!(")
-                || line.contains("dbg!(")
-                || line.contains("print!(")
+            line.contains("println!(") //nolint:rust/debug-macro
+                || line.contains("eprintln!(") //nolint:rust/debug-macro
+                || line.contains("dbg!(") //nolint:rust/dbg-macro
+                || line.contains("print!(") //nolint:rust/debug-macro
         }
-        Rule::DbgMacro => line.contains("dbg!("),
+        Rule::DbgMacro => line.contains("dbg!("), //nolint:rust/dbg-macro
     }
 }
 
@@ -177,10 +204,27 @@ mod tests {
     }
 
     #[test]
+    fn skips_comments() {
+        let src = "/// A `.unwrap()` call.\n// panic!(\"later\")\nfn f() {}\n";
+        assert!(scan_source("a.rs", src, &[Rule::Unwrap, Rule::PanicMacro]).is_empty());
+    }
+
+    #[test]
+    fn honours_a_nolint_comment() {
+        let blanket = "fn f() { todo!() } //nolint\n";
+        assert!(scan_source("a.rs", blanket, &[Rule::PanicMacro]).is_empty());
+        let specific = "fn f() { todo!() } //nolint:rust/panic-macro\n";
+        assert!(scan_source("a.rs", specific, &[Rule::PanicMacro]).is_empty());
+        let other = "fn f() { todo!() } //nolint:rust/unsafe\n";
+        assert_eq!(scan_source("a.rs", other, &[Rule::PanicMacro]).len(), 1);
+    }
+
+    #[test]
     fn recognises_test_files() {
         assert!(!is_test_file("src/lib.rs"));
         assert!(is_test_file("tests/integration.rs"));
         assert!(is_test_file("src/foo_test.rs"));
+        assert!(is_test_file("src/cli/tests.rs"));
         assert!(!is_test_file("src/main.rs"));
     }
 }

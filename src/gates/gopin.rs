@@ -15,6 +15,7 @@ use regex::Regex;
 use crate::config::Config;
 use crate::gates::GateResult;
 use crate::output::{Diagnostic, Report};
+use crate::static_regex;
 
 /// The default name of the version file.
 pub const DEFAULT_VERSION_FILE: &str = ".go-version";
@@ -37,25 +38,23 @@ pub struct PinFinding {
 }
 
 fn semver_re() -> Regex {
-    Regex::new(r"^\d+\.\d+\.\d+$").expect("static semver regex must compile")
+    static_regex::compile(r"^\d+\.\d+\.\d+$")
 }
 
 fn go_image_re() -> Regex {
-    Regex::new(r#"(?m)^\s*GO_IMAGE:\s*"[^"]*golang:(\d+\.\d+\.\d+)""#)
-        .expect("static GO_IMAGE regex must compile")
+    static_regex::compile(r#"(?m)^\s*GO_IMAGE:\s*"[^"]*golang:(\d+\.\d+\.\d+)""#)
 }
 
 fn go_directive_re() -> Regex {
-    Regex::new(r"(?m)^go\s+(\d+\.\d+)").expect("static go directive regex must compile")
+    static_regex::compile(r"(?m)^go\s+(\d+\.\d+)")
 }
 
 fn docker_from_re() -> Regex {
-    Regex::new(r"(?m)^\s*FROM\s+\S*golang:(\d+\.\d+\.\d+)").expect("static FROM regex must compile")
+    static_regex::compile(r"(?m)^\s*FROM\s+\S*golang:(\d+\.\d+\.\d+)")
 }
 
 fn required_go_re() -> Regex {
-    Regex::new(r#"REQUIRED_GO_VERSION="\d+\.\d+\.\d+""#)
-        .expect("static REQUIRED_GO_VERSION regex must compile")
+    static_regex::compile(r#"REQUIRED_GO_VERSION="\d+\.\d+\.\d+""#)
 }
 
 /// Checks the toolchain pin across every surface.
@@ -192,8 +191,26 @@ fn check_require_go(root: &Path, script: &str, want: &str) -> Vec<PinFinding> {
     findings
 }
 
+/// Whether the repository has any Go for this gate to pin.
+///
+/// A repository without Go sources has no pin to disagree with it, so
+/// reporting a missing `.go-version` there would be noise, not a finding.
+fn has_go_sources(root: &Path) -> bool {
+    if root.join("go.mod").is_file() || root.join(DEFAULT_VERSION_FILE).is_file() {
+        return true;
+    }
+    crate::fsutil::walk_files(root)
+        .into_iter()
+        .any(|entry| entry.extension() == ".go")
+}
+
 /// Runs the gate and returns its result.
 pub fn run(cfg: &Config) -> Result<GateResult, String> {
+    if !has_go_sources(cfg.root()) {
+        let mut report = Report::new("go-pin");
+        report.summary = "go-pin: no Go sources, skipped".to_string();
+        return Ok(GateResult::finish(report));
+    }
     let (findings, version) = check(
         cfg.root(),
         DEFAULT_VERSION_FILE,
@@ -228,7 +245,9 @@ pub fn text_body(result: &GateResult) -> String {
     for d in &result.report.diagnostics {
         body.push_str(&format!("  ✗ {}: {}\n", d.path, d.message));
     }
-    if result.passed() {
+    if let Some(line) = crate::gates::skipped_line(&result.report.summary) {
+        body.push_str(&line);
+    } else if result.passed() {
         body.push_str("✅ Go toolchain pin is consistent\n");
     } else {
         body.push_str(&format!(

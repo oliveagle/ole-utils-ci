@@ -59,6 +59,15 @@ impl GateResult {
     }
 }
 
+/// The line a gate prints when it had nothing to check.
+///
+/// A gate that skips puts its reason in the summary rather than in a
+/// diagnostic, so the legacy text must not claim a pass it never made.
+pub fn skipped_line(summary: &str) -> Option<String> {
+    summary
+        .ends_with("skipped")
+        .then(|| format!("⏭ {summary}\n"))
+}
 /// Prints a gate result in the requested format and returns the exit code.
 pub fn emit(cfg: &Config, result: &GateResult) -> i32 {
     let mode = cfg.output_mode();

@@ -82,8 +82,6 @@ fn tighten(dst: &mut usize, value: usize) {
     }
 }
 
-/// Measures every source package in the repository.
-
 /// Counts the non-empty lines of a source file.
 fn count_non_empty_lines(source: &str) -> usize {
     source.lines().filter(|l| !l.trim().is_empty()).count()
