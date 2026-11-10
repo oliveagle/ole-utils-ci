@@ -168,6 +168,27 @@ pub fn is_file(path: &Path) -> bool {
     path.is_file()
 }
 
+/// Resolves `path` against the current directory the way Go's
+/// `filepath.Abs` does: a purely lexical join plus `Clean`, with no
+/// symlink resolution, so the result matches the Go tool byte for byte.
+pub fn absolute(path: &Path) -> Result<PathBuf, std::io::Error> {
+    let mut out = if path.is_absolute() {
+        PathBuf::new()
+    } else {
+        std::env::current_dir()?
+    };
+    for component in path.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other),
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

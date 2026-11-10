@@ -66,8 +66,10 @@ pub fn parse_mode(raw: &str) -> Mode {
 pub fn validate_mode(raw: &str) -> Result<(), String> {
     match raw.trim().to_ascii_lowercase().as_str() {
         "" | "text" | "json" | "toon" => Ok(()),
-        other => Err(format!(
-            "unknown --output value {other:?} — use text, json, or toon"
+        // Go quotes the value exactly as the caller spelled it, before the
+        // case fold that decides whether it is acceptable.
+        _ => Err(format!(
+            "unknown --output value {raw:?} — use text, json, or toon"
         )),
     }
 }

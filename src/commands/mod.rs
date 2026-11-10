@@ -9,6 +9,7 @@
 
 pub mod all;
 pub mod arch;
+pub mod branch_coverage;
 pub mod ci;
 pub mod dist;
 pub mod doctor;
@@ -18,6 +19,7 @@ pub mod git_author;
 pub mod git_author_cmd;
 pub mod goenv;
 pub mod goenv_scan;
+pub mod gomut;
 pub mod kms_stub;
 pub mod kms_stub_cmd;
 pub mod kms_stub_http;
@@ -26,6 +28,7 @@ pub mod release_model;
 pub mod repo;
 pub mod reports;
 pub mod rust;
+pub mod tengo;
 pub mod toolchain;
 pub mod version;
 pub mod web;

@@ -121,6 +121,15 @@ fn dispatch(command: &str, args: &[String]) -> Result<i32, String> {
         "build" => with_config(commands::toolchain::build, &mut cfg, args),
         "coverage" => with_config(commands::toolchain::coverage, &mut cfg, args),
         "test-report" => with_config(commands::toolchain::test_report, &mut cfg, args),
+        "branch-coverage" => {
+            with_config(commands::branch_coverage::branch_coverage, &mut cfg, args)
+        }
+        // Go hands `gomut` and the `tengo-*` commands their raw args: each
+        // owns a private flag set the shared parser must not see.
+        "gomut" => commands::gomut::gomut(args),
+        "tengo-test" => commands::tengo::tengo_test(args),
+        "tengo-coverage" => commands::tengo::tengo_coverage(args),
+        "tengo-mutate" => commands::tengo::tengo_mutate(args),
         "all" => with_config(commands::all::run, &mut cfg, args),
         "version-check" => with_config(commands::version::version_check, &mut cfg, args),
         "release-check" => with_config(commands::version::release_check, &mut cfg, args),
@@ -264,6 +273,11 @@ Go toolchain:
   build                go build ./...
   coverage             Line coverage against the threshold.
   test-report          JUnit XML report.
+  branch-coverage      Branch coverage check (gobco).
+  gomut                Go mutation testing (gomut).
+  tengo-test           Tengo tool unit tests with fake call_tool mocks.
+  tengo-coverage       Tengo line + branch coverage gates.
+  tengo-mutate         Tengo source mutation testing.
   all                  The whole quality gate.
 
 Version and release:
