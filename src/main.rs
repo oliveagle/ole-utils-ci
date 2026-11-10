@@ -66,34 +66,32 @@ fn split_args(argv: &[String]) -> (String, Vec<String>, bool) {
     (command, args, timestamped)
 }
 
-/// Runs a command with every output line prefixed by a timestamp.
+/// Runs a command, prefixing every line of its standard output with a
+/// timestamp — the format Go's `tsWriter` produces: `2006-01-02 15:04:05 `
+/// in front of each line, including a final line that has no newline.
+///
+/// The child must not see `DEVINE_UTILS_TS`: this process is already the
+/// timestamping wrapper, so letting the variable through would make every
+/// child re-exec itself forever. Go only wraps `os.Stdout`, so the child's
+/// standard error is passed through untouched.
 fn run_timestamped(command: &str, args: &[String]) -> ExitCode {
     let exe =
         std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("devine-utils-ci"));
     let mut child = std::process::Command::new(exe);
     child.arg(command).args(args);
+    child.env_remove("DEVINE_UTILS_TS");
     let Ok(output) = child.output() else {
         eprintln!("Error: failed to run the command");
         return ExitCode::from(1);
     };
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
     let mut out = std::io::stdout().lock();
-    for line in stdout.lines() {
-        let _ = writeln!(
-            out,
-            "[{}] {line}",
-            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
-        );
+    for line in output.stdout.split_inclusive(|&byte| byte == b'\n') {
+        let _ = write!(out, "{} ", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
+        let _ = out.write_all(line);
     }
     let _ = out.flush();
-    for line in stderr.lines() {
-        let _ = writeln!(
-            std::io::stderr(),
-            "[{}] {line}",
-            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
-        );
-    }
+    let mut err = std::io::stderr().lock();
+    let _ = err.write_all(&output.stderr);
     ExitCode::from(output.status.code().unwrap_or(1) as u8)
 }
 
