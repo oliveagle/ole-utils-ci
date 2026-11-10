@@ -1,0 +1,50 @@
+[package]
+name = "devine-utils-ci"
+version = "0.11.7"
+edition = "2021"
+rust-version = "1.85"
+description = "Unified CI quality-gate tool — Rust rewrite of devine-utils-ci"
+license = "Apache-2.0"
+repository = "https://github.com/oliveagle/ole-utils-ci"
+readme = "README.md"
+keywords = ["ci", "quality-gate", "lint", "rust"]
+categories = ["development-tools", "command-line-utilities"]
+
+[[bin]]
+name = "devine-utils-ci"
+path = "src/main.rs"
+
+[lib]
+name = "devine_utils_ci"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+globset = "0.4"
+hex = "0.4"
+ignore = "0.4"
+libc = "0.2"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+serde_yaml = "0.9"
+sha2 = "0.10"
+thiserror = "2"
+toml = "0.9"
+toon-format = "0.7"
+walkdir = "2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+opt-level = 0
+debug = 1

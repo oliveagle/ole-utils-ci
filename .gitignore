@@ -1,0 +1,21 @@
+# Rust build artifacts
+/target/
+/bin/
+/dist/
+
+# Go build artifacts (kept for the Go-side parity commands)
+/_build/
+/.go-mod/
+/vendor/
+
+# Reports produced by the tool
+/coverage.html
+/coverage.json
+/junit.xml
+/reports/
+
+# Editors and OS noise
+.idea/
+.vscode/
+*.swp
+.DS_Store

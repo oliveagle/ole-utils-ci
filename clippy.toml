@@ -1,0 +1,3 @@
+# The clippy gate runs with `-D warnings`, so the lint set is kept explicit.
+msrv = "1.85"
+warn-on-all-warnings = true

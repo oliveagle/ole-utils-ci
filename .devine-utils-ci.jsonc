@@ -1,0 +1,22 @@
+{
+  // Configuration for the devine-utils-ci quality gates.
+  //
+  // A project may only *tighten* the built-in budgets. Raising a threshold,
+  // switching a file-length profile or excluding a path from a hard budget is
+  // a configuration error, not a warning.
+  "ignore": {
+    "paths": [
+      "target/**",
+      "vendor/**"
+    ]
+  },
+  "file-length": {
+    "profiles": {
+      "source": { "warn": 300, "max": 450 }
+    }
+  },
+  "complexity": {
+    "warn": 12,
+    "max": 18
+  }
+}
