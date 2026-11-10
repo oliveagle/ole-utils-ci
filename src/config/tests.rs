@@ -54,3 +54,25 @@ fn project_root_is_resolved_to_an_absolute_path() {
     let (cfg, _) = parse(&[]).unwrap();
     assert!(cfg.project_root.is_absolute());
 }
+
+#[test]
+fn the_o_alias_and_coverage_profile_reach_the_config() {
+    let (cfg, _) = parse(&["-o", "json", "--coverage-profile", "cover.out"]).unwrap();
+    assert_eq!(cfg.output, "json");
+    assert_eq!(cfg.cover_profile, "cover.out");
+}
+
+#[test]
+fn cover_profile_is_not_a_flag_go_knows() {
+    // Go registers `coverage-profile` only; the old spelling must be refused.
+    let err = parse(&["--cover-profile", "cover.out"]).unwrap_err();
+    assert!(err.contains("flag provided but not defined: -cover-profile"));
+}
+
+#[test]
+fn max_file_lines_set_follows_the_long_spelling() {
+    let (cfg, _) = parse(&["--max-file-lines=500"]).unwrap();
+    assert!(cfg.max_file_lines_set);
+    let (cfg, _) = parse(&[]).unwrap();
+    assert!(!cfg.max_file_lines_set);
+}

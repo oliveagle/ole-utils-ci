@@ -35,7 +35,7 @@ pub fn kms_stub(args: &[String]) -> Result<i32, String> {
     if let Err(e) = fs.parse(args) {
         // Go `flag` answers `-h` with the usage block and exit 0, and any
         // other bad flag with the error, the usage block and exit 2.
-        if matches!(&e, ParseError::UnknownFlag { name } if name == "h" || name == "help") {
+        if matches!(e, ParseError::Help) {
             print_usage();
             return Ok(0);
         }

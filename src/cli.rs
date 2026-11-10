@@ -20,6 +20,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::goparse;
+
 /// The type of a registered flag.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FlagKind {
@@ -88,6 +90,25 @@ pub enum ParseError {
     UnknownFlag {
         /// The offending flag name, without dashes.
         name: String,
+    },
+    /// Go's answer to `-h`, `-help` or `--help` when neither is registered.
+    #[error("flag: help requested")]
+    Help,
+    /// A token whose spelling is not a legal flag at all (`---x`, `--=x`).
+    #[error("bad flag syntax: {arg}")]
+    BadSyntax {
+        /// The offending argument, dashes and all.
+        arg: String,
+    },
+    /// A value that could not be parsed as a boolean flag's type.
+    #[error("invalid boolean value {value:?} for -{name}: {reason}")]
+    InvalidBoolValue {
+        /// The offending flag name, without dashes.
+        name: String,
+        /// The raw value the caller supplied.
+        value: String,
+        /// Why the value was rejected.
+        reason: String,
     },
     /// A flag that needs a value but was given none.
     #[error("flag needs an argument: -{name}")]
@@ -183,33 +204,45 @@ impl FlagSet {
 
     /// Parses `argv`, filling in registered flags and collecting positionals.
     ///
-    /// A flag may come before or after the positionals: `bump-version patch
-    /// --dry-run` has to reach the same configuration as the other order.
+    /// The rules are Go's `flag` rules: parsing stops at the first
+    /// positional argument, `--` terminates the flags, `-name=value` carries
+    /// an inline value, and `-h` / `-help` answer with [`ParseError::Help`]
+    /// when neither of them is registered.
     pub fn parse(&mut self, argv: &[String]) -> Result<(), ParseError> {
         let mut positionals: Vec<String> = Vec::new();
         let mut i = 0;
         while i < argv.len() {
             let arg = &argv[i];
+            // Go stops as soon as a token is not a flag: `len(s) < 2 || s[0] != '-'`.
+            if arg.len() < 2 || !arg.starts_with('-') {
+                positionals.extend_from_slice(&argv[i..]);
+                break;
+            }
             if arg == "--" {
                 positionals.extend_from_slice(&argv[i + 1..]);
                 break;
             }
-            if !is_flag(arg) {
-                positionals.push(arg.clone());
-                i += 1;
-                continue;
+            let dashes = if arg.starts_with("--") { 2 } else { 1 };
+            let body = &arg[dashes..];
+            if body.starts_with('-') || body.starts_with('=') {
+                return Err(ParseError::BadSyntax { arg: arg.clone() });
             }
-            let (raw_name, inline) = split_flag(arg);
+            let (raw_name, inline) = match body.split_once('=') {
+                Some((name, value)) => (name.to_string(), Some(value.to_string())),
+                None => (body.to_string(), None),
+            };
             let name = self.resolve(&raw_name);
-            let kind = match self.kinds.get(&name) {
-                Some(k) => *k,
-                None => return Err(ParseError::UnknownFlag { name: raw_name }),
+            let Some(kind) = self.kinds.get(&name).copied() else {
+                if raw_name == "h" || raw_name == "help" {
+                    return Err(ParseError::Help);
+                }
+                return Err(ParseError::UnknownFlag { name: raw_name });
             };
             self.provided.insert(name.clone());
             match kind {
                 FlagKind::Bool => {
                     let raw = inline.unwrap_or_else(|| "true".to_string());
-                    let value = self.coerce(&name, kind, raw)?;
+                    let value = self.coerce(&raw_name, kind, raw)?;
                     self.values.insert(name, value);
                 }
                 _ => {
@@ -219,11 +252,16 @@ impl FlagSet {
                             i += 1;
                             argv.get(i)
                                 .cloned()
-                                .ok_or_else(|| ParseError::MissingValue { name: name.clone() })?
+                                .ok_or_else(|| ParseError::MissingValue {
+                                    name: raw_name.clone(),
+                                })?
                         }
                     };
-                    let value = self.coerce(&name, kind, raw)?;
-                    self.values.insert(name, value);
+                    // Go's list flags ignore an empty value and keep the old one.
+                    if !(kind == FlagKind::List && raw.is_empty()) {
+                        let value = self.coerce(&raw_name, kind, raw)?;
+                        self.values.insert(name, value);
+                    }
                 }
             }
             i += 1;
@@ -232,49 +270,44 @@ impl FlagSet {
         Ok(())
     }
 
+    /// Coerces one raw value into the flag's type, worded like Go's `flag`.
     fn coerce(&self, name: &str, kind: FlagKind, raw: String) -> Result<FlagValue, ParseError> {
         match kind {
             FlagKind::Str => Ok(FlagValue::Str(raw)),
             FlagKind::Int => {
-                raw.parse::<i64>()
+                goparse::parse_int(&raw)
                     .map(FlagValue::Int)
                     .map_err(|e| ParseError::InvalidValue {
                         name: name.to_string(),
-                        value: raw.clone(),
-                        reason: e.to_string(),
+                        value: raw,
+                        reason: e.as_str().to_string(),
                     })
             }
-            FlagKind::List => Ok(FlagValue::List(
-                raw.split(',')
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty())
-                    .collect(),
-            )),
-            FlagKind::Bool => match raw.parse::<bool>() {
-                Ok(value) => Ok(FlagValue::Bool(value)),
-                Err(e) => Err(ParseError::InvalidValue {
+            // Go splits on commas without trimming: `strings.Split(value, ",")`.
+            FlagKind::List => Ok(FlagValue::List(raw.split(',').map(String::from).collect())),
+            FlagKind::Bool => match parse_go_bool(&raw) {
+                Some(value) => Ok(FlagValue::Bool(value)),
+                None => Err(ParseError::InvalidBoolValue {
                     name: name.to_string(),
                     value: raw,
-                    reason: e.to_string(),
+                    reason: "parse error".to_string(),
                 }),
             },
         }
     }
 }
 
-/// Whether the argument looks like a flag rather than a positional.
-fn is_flag(arg: &str) -> bool {
-    arg.len() > 1 && arg.starts_with('-')
-}
-
-/// Splits `-name=value` into its name and optional inline value.
-fn split_flag(arg: &str) -> (String, Option<String>) {
-    let trimmed = arg.trim_start_matches('-');
-    match trimmed.split_once('=') {
-        Some((name, value)) => (name.to_string(), Some(value.to_string())),
-        None => (trimmed.to_string(), None),
+/// `strconv.ParseBool`: exactly the spellings Go's boolean flags accept.
+fn parse_go_bool(raw: &str) -> Option<bool> {
+    match raw {
+        "1" | "t" | "T" | "TRUE" | "true" | "True" => Some(true),
+        "0" | "f" | "F" | "FALSE" | "false" | "False" => Some(false),
+        _ => None,
     }
 }
+
+mod usage;
+pub use usage::GLOBAL_USAGE;
 
 #[cfg(test)]
 mod tests;

@@ -11,7 +11,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::cli::FlagSet;
+use crate::cli::{FlagSet, ParseError, GLOBAL_USAGE};
 use crate::output;
 
 /// Hard quality budgets owned by the tool, not by project configuration.
@@ -136,7 +136,7 @@ impl Config {
             .str_flag("junit", &self.junit_path)
             .str_flag("coverage-html", &self.coverage_html_path)
             .str_flag("coverage-json", &self.coverage_json_path)
-            .str_flag("cover-profile", &self.cover_profile)
+            .str_flag("coverage-profile", &self.cover_profile)
             .str_flag("mode", self.mode.as_str())
             .str_flag("build-tags", &self.build_tags)
             .str_flag("base-branch", &self.base_branch)
@@ -149,15 +149,31 @@ impl Config {
             .bool_flag("include-generated", self.include_generated)
             .str_flag("covermode", &self.coverage_mode)
             .str_flag("release-model", &self.release_model)
-            .str_flag("output", &self.output);
+            .str_flag("output", &self.output)
+            .alias("o", "output");
     }
 
     /// Parses `argv` into this configuration.
     ///
-    /// Returns the positional arguments that were left over.
+    /// Returns the positional arguments that were left over. A refused
+    /// command line reproduces Go's stderr: the error line, then the usage
+    /// block, before the caller adds its own `Error: ...` line.
     pub fn parse(&mut self, fs: &mut FlagSet, argv: &[String]) -> Result<Vec<String>, String> {
-        self.max_file_lines_set = fs.was_provided("max-file-lines");
-        fs.parse(argv).map_err(|e| e.to_string())?;
+        // Go's flagWasProvided scans the raw argv for the long spelling only.
+        self.max_file_lines_set = argv
+            .iter()
+            .any(|arg| arg == "--max-file-lines" || arg.starts_with("--max-file-lines="));
+        if let Err(error) = fs.parse(argv) {
+            match &error {
+                // `-h` prints the usage block without a leading error line.
+                ParseError::Help => eprint!("{GLOBAL_USAGE}"),
+                other => {
+                    eprintln!("{other}");
+                    eprint!("{GLOBAL_USAGE}");
+                }
+            }
+            return Err(error.to_string());
+        }
         self.apply(fs);
         self.validate()?;
         let root = self
@@ -191,7 +207,7 @@ impl Config {
         self.junit_path = get_str("junit", "junit.xml");
         self.coverage_html_path = get_str("coverage-html", "coverage.html");
         self.coverage_json_path = get_str("coverage-json", "coverage.json");
-        self.cover_profile = get_str("cover-profile", "");
+        self.cover_profile = get_str("coverage-profile", "");
         self.mode = match get_str("mode", "release").as_str() {
             "dev" => Mode::Dev,
             _ => Mode::Release,
