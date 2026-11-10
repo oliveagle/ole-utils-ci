@@ -4,6 +4,10 @@
 
 //! The proto toolchain commands.
 
+pub mod breaking;
+pub mod generate;
 pub mod lint;
 
+pub use breaking::buf_breaking;
+pub use generate::buf_generate;
 pub use lint::buf_lint;

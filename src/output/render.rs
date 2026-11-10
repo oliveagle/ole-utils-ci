@@ -52,9 +52,15 @@ impl Report {
         out
     }
 
-    /// Canonical JSON rendering.
+    /// Canonical JSON rendering, terminated by a newline the way the Go
+    /// original's `json.Encoder` does.
     pub fn render_json(&self) -> String {
-        serde_json::to_string_pretty(self).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
+        let mut text =
+            serde_json::to_string_pretty(self).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"));
+        if !text.ends_with('\n') {
+            text.push('\n');
+        }
+        text
     }
 
     /// TOON rendering. The payload is normalised through JSON first so both

@@ -134,12 +134,67 @@ fn dispatch(command: &str, args: &[String]) -> Result<i32, String> {
         "arch" => with_config(commands::arch::arch, &mut cfg, args),
         "buf-lint" => with_config(commands::proto::buf_lint, &mut cfg, args),
         "web-lint" => with_config(commands::web::web_lint, &mut cfg, args),
+        "release-model" => with_config(commands::release_model::release_model, &mut cfg, args),
+        "buf-generate" => with_config(commands::proto::buf_generate, &mut cfg, args),
+        "buf-breaking" => buf_breaking_command(&mut cfg, args),
+        "ci-go-env" | "ci_go_env" => go_env_command(&mut cfg, args),
+        "git-author" => git_author_command(&mut cfg, args),
         "report-bundle" => with_config(commands::reports::report_bundle, &mut cfg, args),
         "verify-dist" => with_config(commands::dist::verify_dist, &mut cfg, args),
         "bump-version" => bump_command(&mut cfg, args, false),
         "release-start" => bump_command(&mut cfg, args, true),
         other => Err(format!("unknown command: {other}")),
     }
+}
+
+/// Lifts `--name [value]` (and `--name=value`) out of the argument list.
+///
+/// Commands with flags the shared parser does not know about hoist them
+/// first, the way the Go original hoists `--file` and `--config`, so a later
+/// `--output` is never silently dropped.
+fn hoist_flag(args: &[String], name: &str, default: &str) -> (String, Vec<String>) {
+    let long = format!("--{name}");
+    let mut value = default.to_string();
+    let mut rest = Vec::new();
+    let mut index = 0;
+    while index < args.len() {
+        let arg = &args[index];
+        if arg == &long && index + 1 < args.len() {
+            value = args[index + 1].clone();
+            index += 2;
+            continue;
+        }
+        if let Some(inline) = arg.strip_prefix(&format!("{long}=")) {
+            value = inline.to_string();
+            index += 1;
+            continue;
+        }
+        rest.push(arg.clone());
+        index += 1;
+    }
+    (value, rest)
+}
+
+/// Runs `ci-go-env` with its `--file` flag lifted out first.
+fn go_env_command(cfg: &mut Config, args: &[String]) -> Result<i32, String> {
+    let (env_file, rest) = hoist_flag(args, "file", commands::goenv::DEFAULT_ENV_FILE);
+    commands::gates::parse(cfg, &rest)?;
+    commands::goenv::go_env(cfg, &env_file)
+}
+
+/// Runs `buf-breaking` with its `--against` baseline lifted out first.
+fn buf_breaking_command(cfg: &mut Config, args: &[String]) -> Result<i32, String> {
+    let (against, rest) = hoist_flag(args, "against", "");
+    commands::gates::parse(cfg, &rest)?;
+    commands::proto::buf_breaking(cfg, &against)
+}
+
+/// Runs `git-author`: the sub-command and `--config` come out before the
+/// shared parser sees the rest.
+fn git_author_command(cfg: &mut Config, args: &[String]) -> Result<i32, String> {
+    let (sub, config_path, rest) = commands::git_author_cmd::split_args(args);
+    commands::gates::parse(cfg, &rest)?;
+    commands::git_author_cmd::git_author(cfg, &sub, &config_path)
 }
 
 /// Parses the global flags for a command, then runs it.
