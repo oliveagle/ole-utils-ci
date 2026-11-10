@@ -15,6 +15,7 @@ pub mod config;
 pub mod fsutil;
 pub mod gates;
 pub mod git;
+pub mod httpd;
 pub mod output;
 pub mod quality_config;
 pub mod runner;

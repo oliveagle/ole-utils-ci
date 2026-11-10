@@ -139,6 +139,12 @@ fn dispatch(command: &str, args: &[String]) -> Result<i32, String> {
         "buf-breaking" => buf_breaking_command(&mut cfg, args),
         "ci-go-env" | "ci_go_env" => go_env_command(&mut cfg, args),
         "git-author" => git_author_command(&mut cfg, args),
+        // Go hands `kms-stub` its raw args: the command owns a private flag
+        // set and the global flags must not reach it.
+        "kms-stub" => commands::kms_stub_cmd::kms_stub(args),
+        // Not `with_config`: Go `runFakeMetadata` ignores the global flags
+        // and owns its own `--run` / `-f` switch.
+        "fake-metadata-server" => commands::fake_metadata::fake_metadata(args),
         "report-bundle" => with_config(commands::reports::report_bundle, &mut cfg, args),
         "verify-dist" => with_config(commands::dist::verify_dist, &mut cfg, args),
         "bump-version" => bump_command(&mut cfg, args, false),
@@ -282,6 +288,8 @@ More checks:
   arch                 Dependency cycles and layer direction.
   buf-lint             The proto naming conventions.
   web-lint             Syntax sanity for the front-end sources.
+  fake-metadata-server Stub the Ctrip metadata endpoint for tests.
+  kms-stub             Serve a DEV ONLY local Ctrip KMS stand-in.
 
 Global flags:
   --project-root <path>       Repository to check (default: .).
