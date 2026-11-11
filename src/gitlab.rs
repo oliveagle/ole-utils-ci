@@ -20,7 +20,7 @@ pub const DEFAULT_BASE_URL: &str = "https://git.dev.sh.ctripcorp.com";
 /// Runs `dotvault get <key>`, trimmed, exactly the way the Go original
 /// shells out to the keyring helper.
 pub fn dotvault_get(key: &str) -> Result<String, String> {
-    let out = Runner::new(".", false).run("dotvault", &["get", key])?;
+    let out = Runner::new(".", false).run_stdout("dotvault", &["get", key])?;
     Ok(out.trim().to_string())
 }
 

@@ -7,15 +7,21 @@
 //! `.go-version` is the single source of truth; every version-bearing
 //! surface — the CI image, the Dockerfile, the `go` directive in `go.mod`,
 //! the `require-go` script — must agree with it.
+//!
+//! The standalone command is one of the *focused* lint gates: it owns a
+//! private flag set, defaults to TOON output, exits 2 when the command line
+//! is refused and 1 when the pin has drifted. The per-surface checks live in
+//! [`surfaces`], because each one reads one file and asks one question.
 
 use std::path::Path;
 
-use regex::Regex;
+use regex::Captures;
 
-use crate::config::Config;
-use crate::gates::GateResult;
-use crate::output::{Diagnostic, Report};
-use crate::static_regex;
+use crate::gates::focused;
+use crate::lint_config;
+use crate::output::Diagnostic;
+
+mod surfaces;
 
 /// The default name of the version file.
 pub const DEFAULT_VERSION_FILE: &str = ".go-version";
@@ -26,255 +32,204 @@ pub const DEFAULT_DOCKERFILE: &str = "Dockerfile";
 /// The default name of the `require-go` script.
 pub const DEFAULT_REQUIRE_GO_SCRIPT: &str = "scripts/ci/require-go.sh";
 
-/// One drift finding.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PinFinding {
-    /// The surface that disagrees.
-    pub path: String,
-    /// The rule that was broken.
-    pub rule: String,
-    /// A one-line description.
-    pub message: String,
+/// The surfaces one run of the gate checks.
+#[derive(Debug, Clone)]
+pub struct Settings {
+    /// The single source of truth for the Go version.
+    pub version_file: String,
+    /// The GitLab pipeline file.
+    pub ci_file: String,
+    /// The container build file; empty skips the check.
+    pub dockerfile: String,
+    /// The `require-go` script; empty skips the check.
+    pub require_go_script: String,
+    /// Whether the running `go version` must agree too.
+    pub with_toolchain: bool,
 }
 
-fn semver_re() -> Regex {
-    static_regex::compile(r"^\d+\.\d+\.\d+$")
+impl Default for Settings {
+    fn default() -> Settings {
+        Settings {
+            version_file: DEFAULT_VERSION_FILE.to_string(),
+            ci_file: DEFAULT_CI_FILE.to_string(),
+            dockerfile: DEFAULT_DOCKERFILE.to_string(),
+            require_go_script: DEFAULT_REQUIRE_GO_SCRIPT.to_string(),
+            with_toolchain: false,
+        }
+    }
 }
 
-fn go_image_re() -> Regex {
-    static_regex::compile(r#"(?m)^\s*GO_IMAGE:\s*"[^"]*golang:(\d+\.\d+\.\d+)""#)
-}
-
-fn go_directive_re() -> Regex {
-    static_regex::compile(r"(?m)^go\s+(\d+\.\d+)")
-}
-
-fn docker_from_re() -> Regex {
-    static_regex::compile(r"(?m)^\s*FROM\s+\S*golang:(\d+\.\d+\.\d+)")
-}
-
-fn required_go_re() -> Regex {
-    static_regex::compile(r#"REQUIRED_GO_VERSION="\d+\.\d+\.\d+""#)
+/// Reads the version file, or the finding that stops the run.
+enum Pin {
+    /// The version as written, plus its `x.y` prefix.
+    Ready(String, String),
+    /// The pin itself is unusable; every later surface is skipped.
+    Blocked(Vec<Diagnostic>),
 }
 
 /// Checks the toolchain pin across every surface.
+///
+/// `extra` is `None` when the pin itself is missing or malformed, which is
+/// exactly when the Go original returns a nil payload.
 pub fn check(
     root: &Path,
-    version_file: &str,
-    ci_file: &str,
-    dockerfile: &str,
-    require_go_script: &str,
-) -> (Vec<PinFinding>, Option<String>) {
-    let mut findings = Vec::new();
-    let version_path = root.join(version_file);
-    let Ok(raw) = std::fs::read_to_string(&version_path) else {
-        findings.push(PinFinding {
-            path: version_file.to_string(),
-            rule: "go-pin/version-missing".to_string(),
-            message: "Go version source file is missing".to_string(),
-        });
-        return (findings, None);
-    };
-    let want = raw.trim().to_string();
-    if !semver_re().is_match(&want) {
-        findings.push(PinFinding {
-            path: version_file.to_string(),
-            rule: "go-pin/version-format".to_string(),
-            message: format!("must be full semver x.y.z, got {want:?}"),
-        });
-        return (findings, None);
-    }
-    let want_mm = match want.rfind('.') {
-        Some(idx) => want[..idx].to_string(),
-        None => want.clone(),
-    };
-    findings.extend(check_ci(root, ci_file, &want));
-    findings.extend(check_dockerfile(root, dockerfile, &want));
-    findings.extend(check_gomod(root, &want_mm));
-    findings.extend(check_require_go(root, require_go_script, &want));
-    (findings, Some(want))
-}
-
-fn check_ci(root: &Path, ci_file: &str, want: &str) -> Vec<PinFinding> {
-    let path = root.join(ci_file);
-    let Ok(content) = std::fs::read_to_string(&path) else {
-        return vec![PinFinding {
-            path: ci_file.to_string(),
-            rule: "go-pin/ci-missing".to_string(),
-            message: "CI file is missing".to_string(),
-        }];
+    settings: &Settings,
+) -> Result<(Vec<Diagnostic>, Option<serde_json::Value>), String> {
+    let (want, want_mm) = match surfaces::read_version(root, &settings.version_file)? {
+        Pin::Ready(want, want_mm) => (want, want_mm),
+        Pin::Blocked(findings) => return Ok((findings, None)),
     };
     let mut findings = Vec::new();
-    match go_image_re().captures(&content) {
-        None => findings.push(PinFinding {
-            path: ci_file.to_string(),
-            rule: "go-pin/ci-image-missing".to_string(),
-            message: "GO_IMAGE with a golang:x.y.z tag was not found".to_string(),
-        }),
-        Some(caps) => {
-            let found = caps.get(1).map(|m| m.as_str()).unwrap_or_default();
-            if found != want {
-                findings.push(PinFinding {
-                    path: ci_file.to_string(),
-                    rule: "go-pin/ci-image".to_string(),
-                    message: format!("GO_IMAGE uses golang:{found}, expected golang:{want}"),
-                });
-            }
-        }
-    }
-    findings
+    findings.extend(surfaces::check_ci(root, settings, &want)?);
+    findings.extend(surfaces::check_dockerfile(root, settings, &want)?);
+    findings.extend(surfaces::check_require_go(root, settings)?);
+    findings.extend(surfaces::check_gomod(root, &want, &want_mm)?);
+    let running = check_toolchain(root, settings, &want, &mut findings);
+    let with_toolchain = settings.with_toolchain;
+    Ok((
+        findings,
+        Some(extra(settings, &want, &running, with_toolchain)),
+    ))
 }
 
-fn check_dockerfile(root: &Path, dockerfile: &str, want: &str) -> Vec<PinFinding> {
-    let path = root.join(dockerfile);
-    let Ok(content) = std::fs::read_to_string(&path) else {
-        return Vec::new();
-    };
-    let mut findings = Vec::new();
-    for caps in docker_from_re().captures_iter(&content) {
-        let found = caps.get(1).map(|m| m.as_str()).unwrap_or_default();
-        if found != want {
-            findings.push(PinFinding {
-                path: dockerfile.to_string(),
-                rule: "go-pin/docker-image".to_string(),
-                message: format!("Dockerfile uses golang:{found}, expected golang:{want}"),
-            });
-        }
+/// The `extra` payload, with its keys in the sorted order Go's map encodes.
+fn extra(
+    settings: &Settings,
+    want: &str,
+    running: &str,
+    with_toolchain: bool,
+) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    map.insert("platform".to_string(), serde_json::json!(platform()));
+    if with_toolchain {
+        map.insert("running_toolchain".to_string(), serde_json::json!(running));
     }
-    findings
-}
-
-fn check_gomod(root: &Path, want_mm: &str) -> Vec<PinFinding> {
-    let path = root.join("go.mod");
-    let Ok(content) = std::fs::read_to_string(&path) else {
-        return Vec::new();
-    };
-    let mut findings = Vec::new();
-    for caps in go_directive_re().captures_iter(&content) {
-        let found = caps.get(1).map(|m| m.as_str()).unwrap_or_default();
-        if found != want_mm {
-            findings.push(PinFinding {
-                path: "go.mod".to_string(),
-                rule: "go-pin/go-directive".to_string(),
-                message: format!("go.mod declares go {found}, expected {want_mm}"),
-            });
-        }
-    }
-    findings
-}
-
-fn check_require_go(root: &Path, script: &str, want: &str) -> Vec<PinFinding> {
-    let path = root.join(script);
-    let Ok(content) = std::fs::read_to_string(&path) else {
-        return Vec::new();
-    };
-    let mut findings = Vec::new();
-    for caps in required_go_re().captures_iter(&content) {
-        let found = caps
-            .get(0)
-            .map(|m| m.as_str())
-            .unwrap_or_default()
-            .trim_matches('"')
-            .rsplit('=')
-            .next()
-            .unwrap_or_default()
-            .trim_matches('"')
-            .to_string();
-        if found != want {
-            findings.push(PinFinding {
-                path: script.to_string(),
-                rule: "go-pin/require-go".to_string(),
-                message: format!("{script} pins {found}, expected {want}"),
-            });
-        }
-    }
-    findings
-}
-
-/// Whether the repository has any Go for this gate to pin.
-///
-/// A repository without Go sources has no pin to disagree with it, so
-/// reporting a missing `.go-version` there would be noise, not a finding.
-fn has_go_sources(root: &Path) -> bool {
-    if root.join("go.mod").is_file() || root.join(DEFAULT_VERSION_FILE).is_file() {
-        return true;
-    }
-    crate::fsutil::walk_files(root)
-        .into_iter()
-        .any(|entry| entry.extension() == ".go")
-}
-
-/// Runs the gate and returns its result.
-pub fn run(cfg: &Config) -> Result<GateResult, String> {
-    if !has_go_sources(cfg.root()) {
-        let mut report = Report::new("go-pin");
-        report.summary = "go-pin: no Go sources, skipped".to_string();
-        return Ok(GateResult::finish(report));
-    }
-    let (findings, version) = check(
-        cfg.root(),
-        DEFAULT_VERSION_FILE,
-        DEFAULT_CI_FILE,
-        DEFAULT_DOCKERFILE,
-        DEFAULT_REQUIRE_GO_SCRIPT,
+    map.insert("version".to_string(), serde_json::json!(want));
+    map.insert(
+        "version_file".to_string(),
+        serde_json::json!(settings.version_file),
     );
-    let mut report = Report::new("go-pin");
-    report.extra = Some(serde_json::json!({
-        "version": version,
-        "version_file": DEFAULT_VERSION_FILE,
-    }));
-    for f in &findings {
-        report.add(Diagnostic::error(
-            f.path.clone(),
-            f.rule.clone(),
-            f.message.clone(),
-        ));
-    }
-    if report.ok {
-        report.summary = "go-pin: toolchain pin is consistent".to_string();
-        Ok(GateResult::finish(report))
-    } else {
-        report.summary = format!("go-pin: {} finding(s)", findings.len());
-        Ok(GateResult::failed("go-pin", report.summary.clone(), report))
+    serde_json::Value::Object(map)
+}
+
+/// `runtime.GOOS/runtime.GOARCH`, in Go's spelling.
+fn platform() -> String {
+    format!("{}/{}", std::env::consts::OS, go_arch())
+}
+
+/// Maps Rust's architecture names onto Go's `GOARCH` values.
+fn go_arch() -> &'static str {
+    match std::env::consts::ARCH {
+        "x86_64" => "amd64",
+        "x86" => "386",
+        "aarch64" => "arm64",
+        other => other,
     }
 }
 
-/// The human-readable body printed when `--output` is not set.
-pub fn text_body(result: &GateResult) -> String {
-    let mut body = String::from("📌 Checking Go toolchain pin...\n");
-    for d in &result.report.diagnostics {
-        body.push_str(&format!("  ✗ {}: {}\n", d.path, d.message));
+/// `filepath.Base(path)`, with Go's `.` for an empty path.
+fn base_name(path: &str) -> String {
+    Path::new(path)
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| ".".to_string())
+}
+
+/// Reads a text file; `None` means the file does not exist.
+fn read_text(path: &Path) -> Result<Option<String>, String> {
+    match std::fs::read(path) {
+        Ok(data) => Ok(Some(String::from_utf8_lossy(&data).to_string())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("read {}: {e}", path.display())),
     }
-    if let Some(line) = crate::gates::skipped_line(&result.report.summary) {
-        body.push_str(&line);
-    } else if result.passed() {
-        body.push_str("✅ Go toolchain pin is consistent\n");
-    } else {
-        body.push_str(&format!(
-            "✗ {} toolchain drift finding(s)\n",
-            result.report.diagnostics.len()
-        ));
+}
+
+/// The first capture group of `captures`, or the empty string.
+fn group(captures: &Captures<'_>, index: usize) -> String {
+    captures
+        .get(index)
+        .map(|m| m.as_str().to_string())
+        .unwrap_or_default()
+}
+
+/// Compares the running toolchain, when the caller asked for it.
+///
+/// Returns the version the running `go` reported, or the empty string when it
+/// could not be determined — the value the report carries either way.
+fn check_toolchain(
+    root: &Path,
+    settings: &Settings,
+    want: &str,
+    findings: &mut Vec<Diagnostic>,
+) -> String {
+    if !settings.with_toolchain {
+        return String::new();
     }
-    body
+    match running_go_version(root) {
+        Ok(running) => {
+            if running != want {
+                findings.push(Diagnostic::error(
+                    "",
+                    "go-pin/running-toolchain",
+                    format!("running go{running}, expected go{want}"),
+                ));
+            }
+            running
+        }
+        Err(message) => {
+            findings.push(Diagnostic::error("", "go-pin/running-toolchain", message));
+            String::new()
+        }
+    }
+}
+
+/// The version a `go version` run in `dir` reports, without the `go` prefix.
+fn running_go_version(dir: &Path) -> Result<String, String> {
+    let output = std::process::Command::new("go")
+        .arg("version")
+        .current_dir(dir)
+        .output()
+        .map_err(|e| format!("run go version: {e}"))?;
+    let text = String::from_utf8_lossy(&output.stdout).to_string();
+    let fields: Vec<&str> = text.split_whitespace().collect();
+    if fields.len() < 3 {
+        return Err(format!("unexpected go version output: {}", text.trim()));
+    }
+    Ok(fields[2].trim_start_matches("go").to_string())
+}
+
+/// Runs the gate the way the Go command does: a private flag set, TOON
+/// output by default, exit 2 for a refused command line and exit 1 for drift.
+pub fn focused_command(args: &[String]) -> Result<i32, String> {
+    let root = focused::root_default(args);
+    let config = lint_config::load(&root)?;
+    let resolved = lint_config::resolve(&config).go_pin;
+    let mut fs = focused::base(&root, args);
+    fs.str_flag("version-file", &resolved.version_file);
+    fs.str_flag("ci-file", &resolved.ci_file);
+    fs.str_flag("dockerfile", &resolved.dockerfile);
+    fs.str_flag("require-go-script", &resolved.require_go_script);
+    fs.bool_flag("with-toolchain", resolved.with_toolchain);
+    fs.describe("version-file", "Go version source file");
+    fs.describe("ci-file", "GitLab CI file");
+    fs.describe("dockerfile", "Dockerfile (empty to skip)");
+    fs.describe("require-go-script", "require-go script");
+    fs.describe("with-toolchain", "also compare the running go version");
+    let flags = match focused::finish("go-pin", args, fs) {
+        Ok(flags) => flags,
+        Err(failure) => return failure.into_result(),
+    };
+    let settings = Settings {
+        version_file: flags.string("version-file"),
+        ci_file: flags.string("ci-file"),
+        dockerfile: flags.string("dockerfile"),
+        require_go_script: flags.string("require-go-script"),
+        with_toolchain: flags.bool("with-toolchain"),
+    };
+    let (findings, extra) = check(flags.root(), &settings)?;
+    focused::render("go-pin", &findings, extra, flags.mode())?;
+    Ok(0)
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn recognises_semver_versions() {
-        assert!(semver_re().is_match("1.25.11"));
-        assert!(!semver_re().is_match("1.25"));
-        assert!(!semver_re().is_match("v1.25.11"));
-    }
-
-    #[test]
-    fn finds_the_go_image() {
-        let re = go_image_re();
-        let caps = re
-            .captures(r#"  GO_IMAGE: "golang:1.25.11""#)
-            .expect("image should match");
-        assert_eq!(caps.get(1).map(|m| m.as_str()), Some("1.25.11"));
-    }
-}
+mod tests;

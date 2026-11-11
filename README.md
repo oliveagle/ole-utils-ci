@@ -118,7 +118,7 @@ devine-utils-ci all --output toon
 | `git-author` | Enforce the per-repo commit identity policy. |
 | `cleanup` | Stop the background helpers (`fake-metadata-server`) and release their ports. Call it from `after_script` or a `trap`. |
 | `report-bundle` | Collect the reports of a CI run into one directory. |
-| `verify-dist` | Check the release artifacts against `SHA256SUMS`. |
+| `verify-dist` | Verify a `dist/` directory is a valid SPA production build (Vite/Vue/React). |
 
 ### More checks
 
@@ -172,6 +172,26 @@ Three parts of the Go command are not in the Rust port yet:
 - the log viewer (`enter`), the repository-status sub-view and the favourites
   store.
 - mouse support.
+
+### Who parses the flags
+
+Most commands share one flag set: the global one, with `--output`,
+`--project-root`, `--verbose` and the rest. A few commands own a *private*
+flag set instead, exactly as the Go original does, so their flags never reach
+the shared parser and a bad flag prints their own usage block:
+
+| Command | Flag set | Bad flag |
+|---------|----------|----------|
+| `go-pin`, `no-shell-exec`, `plugin-freshness`, `web-lint` | private | exits 2 |
+| `report-bundle` | private | exits 1 |
+| `gomut`, `tengo-*`, `logs`, `pipeline-run`, `pipeline-watch`, `workflow`, `upgrade`, `kms-stub`, `ci-recipe` | private | exits 1 |
+| `verify-dist`, `cleanup` | none (raw arguments) | — |
+| everything else | the global set | exits 1 |
+
+The four focused lint gates also default `--output` to `toon` rather than
+`text`, the way Go's `focusedOutputMode` does, because they exist to be read
+by an agent. `web-lint -h` prints the `flag` package's block on stderr and
+the hand-written one on stdout, precisely as the Go command does.
 
 Everything else — the row layout, the colours, the column widths, the key
 bindings, the cache TTLs, the JSON snapshot and the error wording — is

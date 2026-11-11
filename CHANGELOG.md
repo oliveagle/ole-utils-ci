@@ -97,8 +97,38 @@ These are deliberate; each is documented at the code that causes it.
   codes and the pass-through of every other argument — is the Go behaviour.
 - `doctor`, `bump-version` and `release-start` print a different summary.
 
+- `report-bundle` writes a manifest bundle (`reports/quality-gate/bundle/`
+  with the collected reports and a `manifest.json`) rather than Go's HTML
+  dashboard tree. The flag set, the defaults and the exit codes are Go's.
+- `web-lint` has Go's flag set, result envelope and exit codes, but its
+  engines are a dependency-free scanner — tag structure for HTML, bracket
+  structure for CSS and scripts — rather than Go's HTML parser plus
+  esbuild. Record-keeping (`--ignore`, the file and byte caps, the security
+  root, `--fail-on`) and the text / JSON / TOON renderings match.
+
 ### Fixed
 
+- `report-bundle` and `web-lint` own their flag sets again. Go builds a
+  private `flag.FlagSet` for both, so their flags never reached the shared
+  parser and a bad flag printed their own block: `report-bundle` exits 1,
+  `web-lint` exits 2. `web-lint` also takes `-h` to stdout and returns 0, and
+  now honours `--path`, `--content`, `--language`, `--root`, `--ignore`,
+  `--max-files`, `--max-file-size`, `--format` and `--fail-on` instead of
+  ignoring every one of them.
+- `protect-set` reports a missing token before a missing `--project-id`
+  again: the `dotvault get` lookup now returns the helper's standard output
+  and treats a non-zero exit as "no token", the way Go's `exec.Cmd.Output()`
+  does. Before, the lookup read as a success and its stderr warnings were
+  taken for a token.
+- The focused lint gates — `go-pin`, `no-shell-exec` and `plugin-freshness` —
+  are back on Go's contract: a private flag set, `--output` defaulting to
+  TOON, exit 2 for a refused command line and exit 1 for findings, and their
+  findings behind the `Error:` line.
+- `verify-dist` is the Go command again: it validates a `dist/` SPA
+  production build (`index.html` carrying a module script plus `assets/`
+  with `.js` and `.css`) instead of checking release artifacts against
+  `SHA256SUMS`, and it takes its directory as a raw positional argument
+  because the Go command parses no flags at all.
 - `repo-status` is the Go command again: a live GitLab query for one project
   (project, head pipeline, recent pipelines, jobs, traces, open MRs, commits
   in the last day, latest tag), not a local `git status`. The usage block,
@@ -117,7 +147,7 @@ These are deliberate; each is documented at the code that causes it.
   anything; the dry-run check happens before any filesystem or git change.
 - Global flags are now accepted after positional arguments, so
   `bump-version patch --dry-run` no longer ignores the flag.
-- `ci-lint`, `go-pin`, `goversion`, `buf-lint` and `verify-dist` skip cleanly
-  when the input they need is absent instead of failing the run.
+- `ci-lint`, `go-pin`, `goversion` and `buf-lint` skip cleanly when the
+  input they need is absent instead of failing the run.
 - The `report-bundle` manifest ends with a newline, and generated `reports/`
   output is excluded from the source-scanning gates.

@@ -19,6 +19,7 @@ pub mod gitlab;
 pub mod gojson;
 pub mod goparse;
 pub mod httpd;
+pub mod lint_config;
 pub mod output;
 pub mod quality_config;
 pub mod runner;

@@ -22,6 +22,10 @@ pub const DEFAULT_CMD_TIMEOUT: Duration = Duration::from_secs(300);
 pub struct CmdOutput {
     /// Combined stdout and stderr.
     pub output: String,
+    /// Standard output alone, in the order the process wrote it.
+    pub stdout: String,
+    /// Standard error alone, in the order the process wrote it.
+    pub stderr: String,
     /// Whether the command exited successfully.
     pub success: bool,
     /// The exit code, when the process ran to completion.
@@ -49,11 +53,9 @@ impl Runner {
         }
     }
 
-    /// Adds one environment variable to every command this runner starts.
-    ///
-    /// `blaze` reads its sandbox mode when the daemon starts, so the gates
-    /// push `BLAZE_SANDBOX=off` through here when the container blocks the
-    /// user namespaces the daemon would otherwise isolate itself in.
+    /// Adds one environment variable to every command this runner starts:
+    /// `blaze` reads its sandbox mode at daemon start, so the gates push
+    /// `BLAZE_SANDBOX=off` through here when the container blocks namespaces.
     pub fn with_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.env.push((key.into(), value.into()));
         self
@@ -64,6 +66,24 @@ impl Runner {
         Ok(self
             .run_with_timeout(DEFAULT_CMD_TIMEOUT, program, args)?
             .output)
+    }
+
+    /// Runs a command the way Go's `exec.Cmd.Output()` does: the standard
+    /// output is the result, standard error is dropped, a non-zero exit is an
+    /// error. `dotvault get` needs exactly this — key on stdout, warnings on
+    /// stderr.
+    pub fn run_stdout(&self, program: &str, args: &[&str]) -> Result<String, String> {
+        let out = self.run_with_timeout(DEFAULT_CMD_TIMEOUT, program, args)?;
+        if out.success {
+            return Ok(out.stdout);
+        }
+        Err(format!(
+            "{program} {} failed with exit code {}",
+            args.join(" "),
+            out.code
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "unknown".into())
+        ))
     }
 
     /// Runs a command with an explicit timeout.
@@ -93,22 +113,28 @@ impl Runner {
             match child.try_wait() {
                 Ok(Some(status)) => {
                     let mut output = String::new();
+                    let mut out_text = String::new();
+                    let mut err_text = String::new();
                     if let Some(mut out) = child.stdout.take() {
                         use std::io::Read;
                         let mut buf = String::new();
                         let _ = out.read_to_string(&mut buf);
                         output.push_str(&buf);
+                        out_text = buf;
                     }
                     if let Some(mut err) = child.stderr.take() {
                         use std::io::Read;
                         let mut buf = String::new();
                         let _ = err.read_to_string(&mut buf);
                         output.push_str(&buf);
+                        err_text = buf;
                     }
                     let code = status.code();
                     let success = status.success();
                     return Ok(CmdOutput {
                         output,
+                        stdout: out_text,
+                        stderr: err_text,
                         success,
                         code,
                     });

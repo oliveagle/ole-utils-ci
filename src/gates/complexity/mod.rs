@@ -97,6 +97,19 @@ fn severity_for(value: usize, thresholds: Thresholds) -> Option<Severity> {
     }
 }
 
+/// The languages the report names.
+///
+/// The Go original names its four scanners. This port also understands Rust,
+/// so a Cargo project gets an extra entry — and a Go project's payload stays
+/// byte-identical to the original's.
+fn reported_languages(root: &std::path::Path) -> Vec<&'static str> {
+    let mut languages = lang::LANGUAGES.to_vec();
+    if root.join("Cargo.toml").is_file() {
+        languages.push(lang::RUST_LANGUAGE);
+    }
+    languages
+}
+
 /// Runs the gate and returns its result.
 pub fn run(cfg: &Config) -> Result<GateResult, String> {
     let qcfg = QualityConfig::load(cfg.root())?.unwrap_or_default();
@@ -104,11 +117,13 @@ pub fn run(cfg: &Config) -> Result<GateResult, String> {
     let thresholds = effective_thresholds(cfg, &qcfg);
     let (total, violations) = scan(cfg.root(), thresholds);
     let mut report = Report::new("complexity");
+    // The keys are written in the sorted order Go's `map[string]any` encodes
+    // them in, so the JSON payload is byte-identical to the original's.
     report.extra = Some(serde_json::json!({
-        "warn_threshold": thresholds.warn,
-        "max_threshold": thresholds.max,
         "functions_scanned": total,
-        "languages": lang::LANGUAGES,
+        "languages": reported_languages(cfg.root()),
+        "max_threshold": thresholds.max,
+        "warn_threshold": thresholds.warn,
     }));
     for v in &violations {
         let mut diagnostic = Diagnostic::error(
@@ -133,11 +148,11 @@ pub fn run(cfg: &Config) -> Result<GateResult, String> {
     if errors == 0 {
         Ok(GateResult::finish(report))
     } else {
-        Ok(GateResult::failed(
-            "complexity",
-            report.summary.clone(),
-            report,
-        ))
+        let message = format!("{errors} function(s) exceed complexity threshold");
+        Ok(
+            GateResult::failed("complexity", report.summary.clone(), report)
+                .failing(message.clone(), message),
+        )
     }
 }
 

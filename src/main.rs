@@ -11,7 +11,7 @@ mod dispatch;
 mod usage;
 
 /// The commands that need nothing but the global flags.
-const GATE_COMMANDS: [&str; 12] = [
+const GATE_COMMANDS: [&str; 9] = [
     "bugs",
     "sanity",
     "license",
@@ -20,10 +20,7 @@ const GATE_COMMANDS: [&str; 12] = [
     "complexity",
     "package-size",
     "artifact-size",
-    "go-pin",
     "goversion",
-    "no-shell-exec",
-    "plugin-freshness",
 ];
 
 fn main() -> ExitCode {

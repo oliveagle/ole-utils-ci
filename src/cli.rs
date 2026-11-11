@@ -35,10 +35,14 @@ enum FlagKind {
     Duration,
     /// Comma-separated list flag, stored as one string.
     List,
+    /// Floating-point flag.
+    Float,
+    /// Repeatable value flag: every occurrence appends its parts.
+    Value,
 }
 
 /// A parsed flag value.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FlagValue {
     /// Boolean flag.
     Bool(bool),
@@ -50,49 +54,10 @@ pub enum FlagValue {
     Duration(i64),
     /// Comma-separated list flag, split on commas.
     List(Vec<String>),
-}
-
-impl FlagValue {
-    /// Returns the boolean payload, or `default` for other kinds.
-    pub fn as_bool(&self, default: bool) -> bool {
-        match self {
-            FlagValue::Bool(v) => *v,
-            _ => default,
-        }
-    }
-
-    /// Returns the string payload, or `default` for other kinds.
-    pub fn as_str(&self, default: &str) -> String {
-        match self {
-            FlagValue::Str(v) => v.clone(),
-            _ => default.to_string(),
-        }
-    }
-
-    /// Returns the integer payload, or `default` for other kinds.
-    pub fn as_int(&self, default: i64) -> i64 {
-        match self {
-            FlagValue::Int(v) => *v,
-            _ => default,
-        }
-    }
-
-    /// Returns the duration payload in nanoseconds, or `default` for
-    /// other kinds.
-    pub fn as_duration(&self, default: i64) -> i64 {
-        match self {
-            FlagValue::Duration(v) => *v,
-            _ => default,
-        }
-    }
-
-    /// Returns the list payload, or an empty slice for other kinds.
-    pub fn as_list(&self) -> &[String] {
-        match self {
-            FlagValue::List(v) => v.as_slice(),
-            _ => &[],
-        }
-    }
+    /// Floating-point flag.
+    Float(f64),
+    /// Repeatable value flag: the parts accumulated over every occurrence.
+    Values(Vec<String>),
 }
 
 /// Error produced while parsing the command line.
@@ -153,6 +118,9 @@ pub struct FlagSet {
     /// The registered default of each flag, spelled the way Go's `flag`
     /// records `DefValue`.
     defs: BTreeMap<String, String>,
+    /// The type name each flag prints in the usage block, when it is not the
+    /// name of the flag's kind.
+    types: BTreeMap<String, String>,
     /// Positional arguments left after the flags.
     pub args: Vec<String>,
 }
@@ -210,6 +178,38 @@ impl FlagSet {
         self
     }
 
+    /// Registers a floating-point flag with its default value.
+    pub fn float_flag(&mut self, name: &str, default: f64) -> &mut Self {
+        self.kinds.insert(name.to_string(), FlagKind::Float);
+        self.values
+            .insert(name.to_string(), FlagValue::Float(default));
+        self.defs.insert(name.to_string(), format_go_float(default));
+        self
+    }
+
+    /// Registers a repeatable value flag (`fs.Var` over a `[]string`).
+    ///
+    /// Every occurrence appends the comma-separated parts, trimming the
+    /// whitespace around each and dropping the empty ones — Go's
+    /// `stringListFlag.Set` in `web_lint_cmd.go`.
+    pub fn value_flag(&mut self, name: &str) -> &mut Self {
+        self.kinds.insert(name.to_string(), FlagKind::Value);
+        self.values
+            .insert(name.to_string(), FlagValue::Values(Vec::new()));
+        self.defs.insert(name.to_string(), String::new());
+        self
+    }
+
+    /// Overrides the type name the usage block prints for `name`.
+    ///
+    /// Go's `flag.UnquoteUsage` lifts a backquoted word out of the usage
+    /// text into the type position; the commands that spell a type that way
+    /// register it here instead.
+    pub fn typ(&mut self, name: &str, type_name: &str) -> &mut Self {
+        self.types.insert(name.to_string(), type_name.to_string());
+        self
+    }
+
     /// Attaches the help text Go's `flag` would print for `name` in its
     /// `PrintDefaults` block.
     pub fn describe(&mut self, name: &str, usage: &str) -> &mut Self {
@@ -250,7 +250,7 @@ mod values;
 
 pub use local::report_parse_error;
 pub use usage::GLOBAL_USAGE;
-pub use values::parse_go_bool;
+pub use values::{format_go_float, parse_go_bool};
 
 use values::duration_string;
 

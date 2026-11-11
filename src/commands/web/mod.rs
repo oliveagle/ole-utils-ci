@@ -4,6 +4,8 @@
 
 //! The front-end commands.
 
+pub mod engine;
 pub mod lint;
+pub mod usage;
 
 pub use lint::web_lint;

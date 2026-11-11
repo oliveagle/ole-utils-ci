@@ -12,10 +12,10 @@
 
 use std::path::Path;
 
-use crate::config::Config;
 use crate::fsutil;
-use crate::gates::GateResult;
-use crate::output::{Diagnostic, Report};
+use crate::gates::focused;
+use crate::lint_config;
+use crate::output::Diagnostic;
 
 /// The directories scanned by default.
 pub const DEFAULT_DIRS: [&str; 2] = ["cmd", "internal"];
@@ -123,48 +123,55 @@ fn detect_shell(line: &str) -> Option<&'static str> {
     None
 }
 
-/// Runs the gate and returns its result.
-pub fn run(cfg: &Config) -> Result<GateResult, String> {
-    let dirs: Vec<String> = DEFAULT_DIRS.iter().map(|s| s.to_string()).collect();
-    let (findings, scanned) = scan(cfg.root(), &dirs, &[]);
-    let mut report = Report::new("no-shell-exec");
-    report.extra = Some(serde_json::json!({
-        "files_scanned": scanned,
-        "dirs": dirs,
-    }));
-    for f in &findings {
-        report.add(
-            Diagnostic::error(f.path.clone(), f.rule.clone(), f.message.clone()).at_line(f.line),
-        );
-    }
-    if report.ok {
-        report.summary = format!("no-shell-exec: scanned {scanned} files, no shell execution");
-        Ok(GateResult::finish(report))
-    } else {
-        report.summary = format!("no-shell-exec: {} finding(s)", findings.len());
-        Ok(GateResult::failed(
-            "no-shell-exec",
-            report.summary.clone(),
-            report,
-        ))
-    }
+/// Runs the gate the way the Go command does: a private flag set, TOON
+/// output by default, exit 2 for a refused command line and exit 1 for a
+/// finding.
+pub fn focused_command(args: &[String]) -> Result<i32, String> {
+    let root = focused::root_default(args);
+    let config = lint_config::load(&root)?;
+    let resolved = lint_config::resolve(&config);
+    let mut fs = focused::base(&root, args);
+    fs.str_flag("dirs", &resolved.no_shell.dirs.join(","));
+    fs.str_flag(
+        "forbidden-paths",
+        &resolved.no_shell.forbidden_paths.join(","),
+    );
+    fs.describe("dirs", "comma-separated production Go directories");
+    fs.describe(
+        "forbidden-paths",
+        "comma-separated shell files that must not exist",
+    );
+    let flags = match focused::finish("no-shell-exec", args, fs) {
+        Ok(flags) => flags,
+        Err(failure) => return failure.into_result(),
+    };
+    let dirs = split_csv(&flags.string("dirs"));
+    let forbidden = split_csv(&flags.string("forbidden-paths"));
+    let (findings, scanned) = scan(flags.root(), &dirs, &forbidden);
+    let diagnostics = findings.iter().map(to_diagnostic).collect::<Vec<_>>();
+    let extra = serde_json::json!({ "dirs": dirs, "files_scanned": scanned });
+    focused::render("no-shell-exec", &diagnostics, Some(extra), flags.mode())?;
+    Ok(0)
 }
 
-/// The human-readable body printed when `--output` is not set.
-pub fn text_body(result: &GateResult) -> String {
-    let mut body = String::from("🚫 Checking for shell execution in production code...\n");
-    for d in &result.report.diagnostics {
-        body.push_str(&format!("  ✗ {}:{}: {}\n", d.path, d.line, d.message));
-    }
-    if result.passed() {
-        body.push_str("✅ No shell execution found\n");
-    } else {
-        body.push_str(&format!(
-            "✗ {} shell execution(s) found\n",
-            result.report.diagnostics.len()
-        ));
-    }
-    body
+/// One finding as the shared report sees it.
+fn to_diagnostic(finding: &ShellFinding) -> Diagnostic {
+    Diagnostic::error(
+        finding.path.clone(),
+        finding.rule.clone(),
+        finding.message.clone(),
+    )
+    .at_line(finding.line)
+}
+
+/// Splits a comma-separated flag the way Go does: trim each part and drop
+/// the empty ones.
+fn split_csv(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .map(String::from)
+        .collect()
 }
 
 #[cfg(test)]

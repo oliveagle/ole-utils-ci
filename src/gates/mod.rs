@@ -18,6 +18,7 @@ pub mod artifact_size;
 pub mod bugs;
 pub mod complexity;
 pub mod file_length;
+pub mod focused;
 pub mod gopin;
 pub mod goversion;
 pub mod license;
@@ -35,13 +36,21 @@ use crate::output::Report;
 pub struct GateResult {
     /// The structured report, always populated.
     pub report: Report,
+    /// The message Go's text renderer returns; `main` prints it as `Error:`.
+    pub text_error: Option<String>,
+    /// The message Go's structured renderer returns.
+    pub structured_error: Option<String>,
 }
 
 impl GateResult {
     /// Wraps an already-populated report. The report carries the command name,
     /// the diagnostics, the `extra` payload and its own `ok` verdict.
     pub fn finish(report: Report) -> Self {
-        GateResult { report }
+        GateResult {
+            report,
+            text_error: None,
+            structured_error: None,
+        }
     }
 
     /// Builds a failing result with the given summary and diagnostics.
@@ -50,7 +59,27 @@ impl GateResult {
         report.command = command.to_string();
         report.summary = summary.into();
         report.ok = false;
-        GateResult { report }
+        GateResult::finish(report)
+    }
+
+    /// Records the two `Error:` messages a failing gate returns.
+    ///
+    /// Go's text and structured renderers return different complaints for the
+    /// same failure — one names the files, the other counts them — so both
+    /// are kept and `emit` picks the one that matches the output mode.
+    pub fn failing(mut self, text: impl Into<String>, structured: impl Into<String>) -> Self {
+        self.text_error = Some(text.into());
+        self.structured_error = Some(structured.into());
+        self
+    }
+
+    /// The complaint to print on stderr, if this run has one.
+    pub fn error_message(&self, structured: bool) -> Option<&str> {
+        if structured {
+            self.structured_error.as_deref()
+        } else {
+            self.text_error.as_deref()
+        }
     }
 
     /// Whether the gate passed.
@@ -76,11 +105,7 @@ pub fn emit(cfg: &Config, result: &GateResult) -> i32 {
     } else {
         print!("{}", result.report.render_text());
     }
-    if result.passed() {
-        0
-    } else {
-        1
-    }
+    report_error(cfg, result)
 }
 
 /// Prints a gate result using the legacy human text, which some scripts grep
@@ -92,9 +117,17 @@ pub fn emit_text(cfg: &Config, result: &GateResult, body: &str) -> i32 {
     } else {
         print!("{body}");
     }
-    if result.passed() {
-        0
-    } else {
-        1
+    report_error(cfg, result)
+}
+
+/// Prints the `Error:` line Go's `fail()` writes and returns the exit code.
+fn report_error(cfg: &Config, result: &GateResult) -> i32 {
+    match result.error_message(cfg.structured()) {
+        Some(message) => {
+            eprintln!("Error: {message}");
+            1
+        }
+        None if result.passed() => 0,
+        None => 1,
     }
 }

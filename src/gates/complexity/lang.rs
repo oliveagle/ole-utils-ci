@@ -13,8 +13,11 @@
 //! The counting rules mirror the Go ones so a project that mixes languages
 //! sees one consistent budget.
 
-/// The languages the complexity gate understands.
-pub const LANGUAGES: [&str; 5] = ["rust", "go", "ts", "js", "tengo"];
+/// The languages the Go original reports, in its order.
+pub const LANGUAGES: [&str; 4] = ["go", "tengo", "ts", "js"];
+
+/// The extra scanner this port adds for Rust projects.
+pub const RUST_LANGUAGE: &str = "rust";
 
 /// One function found in a source file.
 #[derive(Debug, Clone, PartialEq, Eq)]

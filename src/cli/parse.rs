@@ -88,6 +88,15 @@ impl FlagSet {
             return Ok(next);
         }
         let value = self.coerce(raw_name, kind, raw)?;
+        // A repeatable value flag accumulates instead of replacing.
+        if kind == FlagKind::Value {
+            if let Some(FlagValue::Values(parts)) = self.values.get_mut(&name) {
+                if let FlagValue::Values(new) = &value {
+                    parts.extend(new.iter().cloned());
+                }
+            }
+            return Ok(next);
+        }
         self.values.insert(name, value);
         Ok(next)
     }
@@ -115,6 +124,22 @@ impl FlagSet {
                 }),
             // Go splits on commas without trimming: `strings.Split(value, ",")`.
             FlagKind::List => Ok(FlagValue::List(raw.split(',').map(String::from).collect())),
+            FlagKind::Float => crate::goparse::parse_float(&raw)
+                .map(FlagValue::Float)
+                .map_err(|e| ParseError::InvalidValue {
+                    name: name.to_string(),
+                    value: raw,
+                    reason: e.as_str().to_string(),
+                }),
+            // Go's `stringListFlag.Set` trims each part and drops the empty
+            // ones; it never rejects a value.
+            FlagKind::Value => Ok(FlagValue::Values(
+                raw.split(',')
+                    .map(str::trim)
+                    .filter(|part| !part.is_empty())
+                    .map(String::from)
+                    .collect(),
+            )),
             FlagKind::Bool => match parse_go_bool(&raw) {
                 Some(value) => Ok(FlagValue::Bool(value)),
                 None => Err(ParseError::InvalidBoolValue {

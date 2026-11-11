@@ -117,26 +117,32 @@ pub fn scan(root: &std::path::Path, rules: &[ResolvedRule]) -> (Report, Vec<Arti
                 size,
                 rule: rule.clone(),
             });
-            report.add(size_diagnostic(&entry.rel, size, rule));
+            if let Some(diagnostic) = size_diagnostic(&entry.rel, size, rule) {
+                report.add(diagnostic);
+            }
         }
     }
     add_missing_diagnostics(&mut report, rules, &found);
     (report, matches)
 }
 
-fn size_diagnostic(path: &str, size: u64, rule: &ResolvedRule) -> Diagnostic {
+fn size_diagnostic(path: &str, size: u64, rule: &ResolvedRule) -> Option<Diagnostic> {
     let mib = size as f64 / (1024.0 * 1024.0);
-    let message = format!(
-        "artifact is {mib:.2} MiB (warn {:.0} MiB, max {:.0} MiB)",
-        rule.warn_mib, rule.max_mib
-    );
     if rule.max_mib > 0.0 && mib > rule.max_mib {
-        Diagnostic::error(path, "artifact-size.max", message)
-    } else if rule.warn_mib > 0.0 && mib > rule.warn_mib {
-        Diagnostic::warning(path, "artifact-size.warn", message)
-    } else {
-        Diagnostic::info(path, "artifact-size.ok", message)
+        return Some(Diagnostic::error(
+            path,
+            "artifact-size.max",
+            format!("artifact is {mib:.2} MiB (max {:.2} MiB)", rule.max_mib),
+        ));
     }
+    if rule.warn_mib > 0.0 && mib > rule.warn_mib {
+        return Some(Diagnostic::warning(
+            path,
+            "artifact-size.warn",
+            format!("artifact is {mib:.2} MiB (warn {:.2} MiB)", rule.warn_mib),
+        ));
+    }
+    None
 }
 
 fn add_missing_diagnostics(report: &mut Report, rules: &[ResolvedRule], found: &[usize]) {
@@ -145,7 +151,7 @@ fn add_missing_diagnostics(report: &mut Report, rules: &[ResolvedRule], found: &
             report.add(Diagnostic::error(
                 rule.glob.clone(),
                 "artifact-size.missing",
-                format!("required artifact {:?} was not found", rule.glob),
+                "required artifact glob matched no files".to_string(),
             ));
         }
     }
@@ -156,26 +162,28 @@ pub fn run(cfg: &Config) -> Result<GateResult, String> {
     let qcfg = QualityConfig::load(cfg.root())?.unwrap_or_default();
     validate_config(&qcfg)?;
     let rules = resolve_rules(&qcfg)?;
-    if rules.is_empty() {
-        let mut report = Report::new("artifact-size");
-        report.summary = "artifact-size: no artifact rules configured".to_string();
-        return Ok(GateResult::finish(report));
-    }
-    let (mut report, _matches) = scan(cfg.root(), &rules);
+    let (mut report, matches) = scan(cfg.root(), &rules);
     report.command = "artifact-size".to_string();
     let errors = report.counts.errors;
+    // Sorted keys, the way Go's `map[string]any` encodes them.
+    report.extra = Some(serde_json::json!({
+        "matches": matches.len(),
+        "rules": rules.len(),
+    }));
     report.summary = format!(
-        "artifact-size: {errors} error(s), {} warning(s)",
+        "artifact-size: {} rule(s), {} match(es), {errors} error(s), {} warning(s)",
+        rules.len(),
+        matches.len(),
         report.counts.warnings
     );
     if report.ok {
         Ok(GateResult::finish(report))
     } else {
-        Ok(GateResult::failed(
-            "artifact-size",
-            report.summary.clone(),
-            report,
-        ))
+        let message = format!("{errors} artifact-size violation(s)");
+        Ok(
+            GateResult::failed("artifact-size", report.summary.clone(), report)
+                .failing(message.clone(), message),
+        )
     }
 }
 
@@ -193,13 +201,19 @@ pub fn validate_config(qcfg: &QualityConfig) -> Result<(), String> {
 }
 
 /// The human-readable body printed when `--output` is not set.
-pub fn text_body(result: &GateResult, rule_count: usize) -> String {
-    let mut body = String::from("📦 Checking release artifact size budgets...\n");
-    if rule_count == 0 {
-        body.push_str("  No artifact rules configured; skipping.\n");
-        body.push_str("✅ Artifact size check passed\n");
-        return body;
-    }
+pub fn text_body(result: &GateResult) -> String {
+    let extra = result.report.extra.as_ref();
+    let number = |name: &str| {
+        extra
+            .and_then(|payload| payload.get(name))
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0)
+    };
+    let mut body = format!(
+        "📦 Checking release artifact budgets ({} rule(s), {} match(es))...\n",
+        number("rules"),
+        number("matches")
+    );
     for d in &result.report.diagnostics {
         let mark = match d.severity {
             Severity::Error => "✗",
@@ -209,11 +223,9 @@ pub fn text_body(result: &GateResult, rule_count: usize) -> String {
         body.push_str(&format!("  {mark} {}: {}\n", d.path, d.message));
     }
     if result.passed() {
-        body.push_str("✅ Artifact size check passed\n");
-    } else {
         body.push_str(&format!(
-            "✗ ARTIFACT SIZE VIOLATION: {} artifact(s) exceed their budget.\n",
-            result.report.counts.errors
+            "✅ Artifact size check passed with {} warning(s)\n",
+            result.report.counts.warnings
         ));
     }
     body

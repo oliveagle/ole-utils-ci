@@ -139,10 +139,10 @@ pub fn diagnostics(
         push_if_over(
             &mut out,
             m,
-            "package-size.lines",
+            "package-size.source-lines",
             m.lines,
             thresholds.lines,
-            "lines",
+            "source lines",
         );
         push_if_over(
             &mut out,
@@ -178,7 +178,7 @@ fn push_if_over(
     out.push(Diagnostic::warning(
         metric.path.clone(),
         rule,
-        format!("package has {value} {unit} (budget {threshold})"),
+        format!("{} has {value} {unit} (warn {threshold})", metric.path),
     ));
 }
 
@@ -190,14 +190,13 @@ pub fn run(cfg: &Config) -> Result<GateResult, String> {
     let metrics = scan(cfg.root());
     let diags = diagnostics(&metrics, thresholds);
     let mut report = Report::new("package-size");
+    // Sorted keys, the way Go's `map[string]any` encodes them.
     report.extra = Some(serde_json::json!({
         "packages_scanned": metrics.len(),
-        "thresholds": {
-            "files": thresholds.files,
-            "lines": thresholds.lines,
-            "exported_symbols": thresholds.exported,
-            "imports": thresholds.imports,
-        },
+        "warn_exports": thresholds.exported,
+        "warn_files": thresholds.files,
+        "warn_imports": thresholds.imports,
+        "warn_lines": thresholds.lines,
     }));
     for d in diags {
         report.add(d);
@@ -246,12 +245,26 @@ pub fn validate_config(qcfg: &QualityConfig) -> Result<(), String> {
 
 /// The human-readable body printed when `--output` is not set.
 pub fn text_body(result: &GateResult) -> String {
-    let mut body = String::from("📦 Checking source package growth budgets...\n");
+    let extra = result.report.extra.as_ref();
+    let number = |name: &str| {
+        extra
+            .and_then(|payload| payload.get(name))
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0)
+    };
+    let mut body = format!(
+        "📦 Checking package size budgets (warn-only: {} files, {} lines, {} exports, {} imports)...\n",
+        number("warn_files"),
+        number("warn_lines"),
+        number("warn_exports"),
+        number("warn_imports")
+    );
     for d in &result.report.diagnostics {
         body.push_str(&format!("  ⚠ {}: {}\n", d.path, d.message));
     }
     body.push_str(&format!(
-        "✅ Package size check passed with {} warning(s)\n",
+        "✅ Package size check completed: {} package(s), {} warning(s), no hard failure\n",
+        number("packages_scanned"),
         result.report.counts.warnings
     ));
     body

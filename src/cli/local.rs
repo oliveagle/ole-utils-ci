@@ -23,12 +23,17 @@ impl FlagSet {
         let mut out = format!("Usage of {set_name}:\n");
         for (name, kind) in &self.kinds {
             let mut line = format!("  -{name}");
-            let type_name = match kind {
-                FlagKind::Bool => "",
-                FlagKind::Str => "string",
-                FlagKind::Int => "int",
-                FlagKind::Duration => "duration",
-                FlagKind::List => "strings",
+            let type_name = match self.types.get(name) {
+                Some(overridden) => overridden.as_str(),
+                None => match kind {
+                    FlagKind::Bool => "",
+                    FlagKind::Str => "string",
+                    FlagKind::Int => "int",
+                    FlagKind::Duration => "duration",
+                    FlagKind::List => "strings",
+                    FlagKind::Float => "float",
+                    FlagKind::Value => "value",
+                },
             };
             if !type_name.is_empty() {
                 line.push(' ');
@@ -63,9 +68,10 @@ impl FlagSet {
 fn is_zero_default(kind: &FlagKind, def: &str) -> bool {
     match kind {
         FlagKind::Bool => def == "false",
-        FlagKind::Str | FlagKind::List => def.is_empty(),
+        FlagKind::Str | FlagKind::List | FlagKind::Value => def.is_empty(),
         FlagKind::Int => def == "0",
         FlagKind::Duration => def == "0s",
+        FlagKind::Float => def == "0",
     }
 }
 

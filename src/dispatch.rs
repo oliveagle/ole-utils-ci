@@ -7,6 +7,7 @@
 
 use devine_utils_ci::commands;
 use devine_utils_ci::config::Config;
+use devine_utils_ci::gates;
 use devine_utils_ci::version;
 
 use crate::{print_usage, GATE_COMMANDS};
@@ -56,7 +57,14 @@ pub fn dispatch(command: &str, args: &[String]) -> Result<i32, String> {
         "ci-lint" | "glab-ci-lint" => with_config(commands::ci::ci_lint, &mut cfg, args),
         "arch" => with_config(commands::arch::arch, &mut cfg, args),
         "buf-lint" => with_config(commands::proto::buf_lint, &mut cfg, args),
-        "web-lint" => with_config(commands::web::web_lint, &mut cfg, args),
+        // Go hands `web-lint` its raw args: the command owns a private flag
+        // set the shared parser must not see.
+        "web-lint" => commands::web::web_lint(args),
+        // Go runs the focused lint gates with their own private flag sets,
+        // so their flags never reach the shared parser.
+        "go-pin" => gates::gopin::focused_command(args),
+        "no-shell-exec" => gates::noshell::focused_command(args),
+        "plugin-freshness" => gates::plugin_freshness::focused_command(args),
         "release" => with_config(commands::release_cmd::release, &mut cfg, args),
         "release-model" => with_config(commands::release_model::release_model, &mut cfg, args),
         "buf-generate" => with_config(commands::proto::buf_generate, &mut cfg, args),
@@ -93,8 +101,12 @@ pub fn dispatch(command: &str, args: &[String]) -> Result<i32, String> {
         // Go hoists `captain-ci-test`'s own flags before handing the rest to
         // the shared parser, so one line can mix both sets.
         "captain-ci-test" => captain_ci_command(&mut cfg, args),
-        "report-bundle" => with_config(commands::reports::report_bundle, &mut cfg, args),
-        "verify-dist" => with_config(commands::dist::verify_dist, &mut cfg, args),
+        // Go hands `report-bundle` its raw args: the command owns a private
+        // flag set the shared parser must not see.
+        "report-bundle" => commands::reports::report_bundle(args),
+        // Go hands `verify-dist` its raw args: there is no flag set at all,
+        // so the first argument is the directory to check.
+        "verify-dist" => commands::dist::verify_dist(args),
         "bump-version" => bump_command(&mut cfg, args, false),
         "release-start" => bump_command(&mut cfg, args, true),
         // Go prints the complaint and the usage block on stdout and exits 1,

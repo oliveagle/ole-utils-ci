@@ -119,11 +119,17 @@ pub fn run(cfg: &Config) -> Result<GateResult, String> {
             "license: {} file(s) missing a license header",
             missing.len()
         );
-        Ok(GateResult::failed(
-            "license",
-            report.summary.clone(),
-            report,
-        ))
+        let listed: Vec<String> = missing
+            .iter()
+            .map(|path| format!("  ✗ {path}: missing license header"))
+            .collect();
+        let text = format!(
+            "license check found {} file(s) without license header:\n{}",
+            missing.len(),
+            listed.join("\n")
+        );
+        let structured = format!("{} file(s) missing license header", missing.len());
+        Ok(GateResult::failed("license", report.summary.clone(), report).failing(text, structured))
     }
 }
 
@@ -132,14 +138,6 @@ pub fn text_body(result: &GateResult) -> String {
     let mut body = String::from("📜 Checking license headers...\n");
     if result.passed() {
         body.push_str("✅ License check passed\n");
-        return body;
-    }
-    body.push_str(&format!(
-        "license check found {} file(s) without license header:\n",
-        result.report.diagnostics.len()
-    ));
-    for d in &result.report.diagnostics {
-        body.push_str(&format!("  ✗ {}: {}\n", d.path, d.message));
     }
     body
 }

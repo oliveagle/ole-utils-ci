@@ -137,7 +137,11 @@ fn check_build_artifacts(
     project_root: &Path,
     qcfg: &crate::quality_config::QualityConfig,
 ) -> Vec<StructureIssue> {
-    let gitignore = std::fs::read_to_string(project_root.join(".gitignore")).unwrap_or_default();
+    // A repository without a `.gitignore` has nothing to be out of sync
+    // with, so the rule only applies once the file exists.
+    let Ok(gitignore) = std::fs::read_to_string(project_root.join(".gitignore")) else {
+        return Vec::new();
+    };
     BUILD_ARTIFACT_DIRS
         .iter()
         .filter(|artifact| project_root.join(artifact).is_dir())
@@ -168,11 +172,12 @@ pub fn run(cfg: &Config) -> Result<GateResult, String> {
         Ok(GateResult::finish(report))
     } else {
         report.summary = format!("structure: {} issue(s)", issues.len());
-        Ok(GateResult::failed(
-            "structure",
-            report.summary.clone(),
-            report,
-        ))
+        let text = format!("structure check found {} issue(s)", issues.len());
+        let structured = format!("{} structure issue(s)", issues.len());
+        Ok(
+            GateResult::failed("structure", report.summary.clone(), report)
+                .failing(text, structured),
+        )
     }
 }
 
@@ -186,10 +191,6 @@ pub fn text_body(result: &GateResult) -> String {
     for d in &result.report.diagnostics {
         body.push_str(&format!("  ⚠ {}: {}\n", d.path, d.message));
     }
-    body.push_str(&format!(
-        "structure check found {} issue(s)\n",
-        result.report.diagnostics.len()
-    ));
     body
 }
 

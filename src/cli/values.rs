@@ -4,6 +4,8 @@
 
 //! Turning a flag's textual default back into the spelling Go prints.
 
+use super::FlagValue;
+
 /// `time.Duration.String` for the values a flag default can hold: whole
 /// seconds first, then the smaller units, with the sign out front.
 pub fn duration_string(nanos: i64) -> String {
@@ -59,6 +61,81 @@ pub fn parse_go_bool(raw: &str) -> Option<bool> {
         "1" | "t" | "T" | "TRUE" | "true" | "True" => Some(true),
         "0" | "f" | "F" | "FALSE" | "false" | "False" => Some(false),
         _ => None,
+    }
+}
+
+/// `strconv.FormatFloat(v, 'g', -1, 64)`, the spelling Go's `flag` records
+/// as a float flag's `DefValue`.
+///
+/// The shortest round-tripping form is what Rust's `Display` already prints;
+/// Go switches to the exponent form once the exponent leaves `[-4, 21)`, so
+/// the two agree on every flag default a command actually registers.
+pub fn format_go_float(value: f64) -> String {
+    if value == 0.0 {
+        return "0".to_string();
+    }
+    if value.is_finite() && value.fract() == 0.0 && value.abs() < 1e21 {
+        return format!("{value:.0}");
+    }
+    format!("{value}")
+}
+
+impl FlagValue {
+    /// Returns the boolean payload, or `default` for other kinds.
+    pub fn as_bool(&self, default: bool) -> bool {
+        match self {
+            FlagValue::Bool(v) => *v,
+            _ => default,
+        }
+    }
+
+    /// Returns the string payload, or `default` for other kinds.
+    pub fn as_str(&self, default: &str) -> String {
+        match self {
+            FlagValue::Str(v) => v.clone(),
+            _ => default.to_string(),
+        }
+    }
+
+    /// Returns the integer payload, or `default` for other kinds.
+    pub fn as_int(&self, default: i64) -> i64 {
+        match self {
+            FlagValue::Int(v) => *v,
+            _ => default,
+        }
+    }
+
+    /// Returns the duration payload in nanoseconds, or `default` for
+    /// other kinds.
+    pub fn as_duration(&self, default: i64) -> i64 {
+        match self {
+            FlagValue::Duration(v) => *v,
+            _ => default,
+        }
+    }
+
+    /// Returns the list payload, or an empty slice for other kinds.
+    pub fn as_list(&self) -> &[String] {
+        match self {
+            FlagValue::List(v) => v.as_slice(),
+            _ => &[],
+        }
+    }
+
+    /// Returns the floating-point payload, or `default` for other kinds.
+    pub fn as_float(&self, default: f64) -> f64 {
+        match self {
+            FlagValue::Float(v) => *v,
+            _ => default,
+        }
+    }
+
+    /// Returns the accumulated parts of a repeatable value flag.
+    pub fn as_values(&self) -> &[String] {
+        match self {
+            FlagValue::Values(v) => v.as_slice(),
+            _ => &[],
+        }
     }
 }
 

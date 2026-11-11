@@ -4,247 +4,165 @@
 
 //! The `web-lint` command: syntax sanity for the front-end sources.
 //!
-//! The Go original embeds a full HTML and CSS engine. This rewrite keeps the
-//! useful part — catching the mistakes a merge introduces — with a dependency
-//! free scanner: JSON is parsed, and the bracket structure of the HTML, CSS
-//! and script sources is checked.
+//! Go builds a private `flag.FlagSet` for this command and reports with the
+//! `web_lint` result envelope, so its flags never reach the shared parser and
+//! its exit codes are 0 / 1 / 2 rather than the usual 0 / 1. Both the flag
+//! contract and the envelope are reproduced here; the scanners themselves are
+//! the dependency-free ones in [`super::engine`].
 
-use std::path::Path;
+use crate::cli::{report_parse_error, FlagSet, ParseError};
+use crate::output;
 
-use crate::config::Config;
-use crate::fsutil;
-use crate::output::{Diagnostic, Report};
+use super::usage::FRIENDLY_USAGE;
 
-/// The extensions the gate inspects.
-const SCANNED_EXTENSIONS: [&str; 9] = [
-    ".html", ".htm", ".css", ".scss", ".less", ".js", ".jsx", ".ts", ".tsx",
-];
+mod render;
+mod run;
 
-/// One syntax problem.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WebIssue {
-    /// The rule that was broken.
-    pub rule: String,
-    /// A one-line description.
-    pub message: String,
+pub use run::Failure;
+
+/// The default per-run file cap.
+const DEFAULT_MAX_FILES: i64 = 200;
+
+/// The default per-file byte cap.
+const DEFAULT_MAX_FILE_SIZE: i64 = 1_048_576;
+
+/// One parsed `web-lint` command line.
+#[derive(Debug)]
+pub struct Options {
+    /// Project root; also the default security root.
+    pub project_root: String,
+    /// File or directory to lint.
+    pub path: String,
+    /// Inline source to lint.
+    pub content: String,
+    /// Language of the inline source.
+    pub language: String,
+    /// Security root: resolved paths must stay inside.
+    pub root: String,
+    /// `auto`, `builtin` or `external`.
+    pub ts_engine: String,
+    /// tsconfig.json path for the external engine.
+    pub tsconfig: String,
+    /// Path substrings to skip.
+    pub ignore: Vec<String>,
+    /// Cap on files linted per run.
+    pub max_files: i64,
+    /// Per-file byte cap.
+    pub max_file_size: i64,
+    /// `text`, `json` or `toon`.
+    pub format: String,
+    /// Severity that makes the exit code 1.
+    pub fail_on: String,
 }
 
-/// Checks the brackets of a source file.
-pub fn check_brackets(source: &str) -> Option<WebIssue> {
-    let mut stack: Vec<char> = Vec::new();
-    let mut chars = source.chars().peekable();
-    let mut line = 1usize;
-    while let Some(ch) = chars.next() {
-        match ch {
-            '\n' => line += 1,
-            '/' if chars.peek() == Some(&'/') => line = skip_line_comment(&mut chars, line),
-            '/' if chars.peek() == Some(&'*') => line = skip_block_comment(&mut chars, line),
-            '"' | '\'' | '`' => skip_string(&mut chars, ch),
-            '{' | '[' | '(' => stack.push(ch),
-            '}' | ']' | ')' => {
-                if let Some(issue) = closing(&mut stack, ch, line) {
-                    return Some(issue);
-                }
-            }
-            _ => {}
-        }
-    }
-    stack.pop().map(|open| WebIssue {
-        rule: "web/unbalanced-brackets".to_string(),
-        message: format!("{open} is never closed"),
-    })
+/// The private flag set, spelled the way Go's `webLint` builds it.
+pub fn flag_set() -> FlagSet {
+    let mut fs = FlagSet::new();
+    fs.str_flag("project-root", ".")
+        .str_flag("path", "")
+        .str_flag("content", "")
+        .str_flag("language", "")
+        .str_flag("root", "")
+        .str_flag("ts-engine", "auto")
+        .str_flag("tsconfig", "")
+        .int_flag("max-files", DEFAULT_MAX_FILES)
+        .int_flag("max-file-size", DEFAULT_MAX_FILE_SIZE)
+        .int_flag("external-timeout-sec", 60)
+        .str_flag("format", "text")
+        .str_flag("fail-on", "error")
+        .value_flag("ignore")
+        .describe(
+            "project-root",
+            "project root; also the default security root",
+        )
+        .describe(
+            "path",
+            "file or directory to lint (mutually exclusive with --content)",
+        )
+        .describe("content", "inline source to lint (requires --language)")
+        .describe(
+            "language",
+            "html|css|js|ts|tsx|jsx (required with --content)",
+        )
+        .describe("root", "security root: resolved paths must stay inside")
+        .describe("ts-engine", "auto|builtin|external")
+        .describe("tsconfig", "tsconfig.json path for the external tsc engine")
+        .describe("max-files", "cap on files linted per run")
+        .describe("max-file-size", "per-file byte cap")
+        .describe("external-timeout-sec", "timeout for the external tsc run")
+        .describe(
+            "ignore",
+            "comma-separated path substrings to skip (repeatable)",
+        )
+        .describe("format", "text|json|toon")
+        .describe(
+            "fail-on",
+            "error|warning|none — severity that makes exit code 1",
+        );
+    fs
 }
 
-/// Consumes the rest of a `//` comment and returns the line it ends on.
-fn skip_line_comment(
-    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
-    mut line: usize,
-) -> usize {
-    for next in chars.by_ref() {
-        if next == '\n' {
-            line += 1;
-            break;
-        }
-    }
-    line
-}
-
-/// Consumes a `/* … */` comment and returns the line it ends on.
-fn skip_block_comment(
-    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
-    mut line: usize,
-) -> usize {
-    // The opening `*` has already been seen, so it is the first closer to be.
-    let mut previous = '*';
-    for next in chars.by_ref() {
-        if next == '\n' {
-            line += 1;
-        }
-        if previous == '*' && next == '/' {
-            break;
-        }
-        previous = next;
-    }
-    line
-}
-
-/// Applies a closing bracket to the stack, reporting the first mismatch.
-fn closing(stack: &mut Vec<char>, ch: char, line: usize) -> Option<WebIssue> {
-    let expected = match ch {
-        '}' => '{',
-        ']' => '[',
-        _ => '(',
-    };
-    match stack.pop() {
-        Some(open) if open == expected => None,
-        Some(open) => Some(WebIssue {
-            rule: "web/unbalanced-brackets".to_string(),
-            message: format!("line {line}: {ch} closes {open}"),
-        }),
-        None => Some(WebIssue {
-            rule: "web/unbalanced-brackets".to_string(),
-            message: format!("line {line}: {ch} has no opening bracket"),
-        }),
-    }
-}
-
-/// Skips over a string literal.
-fn skip_string(chars: &mut std::iter::Peekable<std::str::Chars<'_>>, quote: char) {
-    let mut previous = '\0';
-    for ch in chars.by_ref() {
-        if previous == '\\' {
-            previous = '\0';
-            continue;
-        }
-        if ch == quote {
-            return;
-        }
-        previous = ch;
-    }
-}
-
-/// Checks the tags of an HTML document.
-pub fn check_html_tags(source: &str) -> Option<WebIssue> {
-    let mut stack: Vec<String> = Vec::new();
-    let mut rest = source;
-    while let Some(start) = rest.find('<') {
-        let after = &rest[start + 1..];
-        let Some(end) = after.find('>') else {
-            return Some(WebIssue {
-                rule: "web/unclosed-tag".to_string(),
-                message: "a tag is never closed".to_string(),
-            });
+impl Options {
+    /// Reads the parsed flags back out of the set.
+    pub fn from(fs: &FlagSet) -> Self {
+        let text = |name: &str| {
+            fs.get(name)
+                .map(|value| value.as_str(""))
+                .unwrap_or_default()
         };
-        let tag = after[..end].trim();
-        rest = &after[end + 1..];
-        if tag.starts_with('!') || tag.starts_with('?') {
-            continue;
-        }
-        if let Some(name) = tag.strip_prefix('/') {
-            let name = name.trim().to_lowercase();
-            match stack.pop() {
-                Some(open) if open == name => {}
-                Some(open) => {
-                    return Some(WebIssue {
-                        rule: "web/mismatched-tag".to_string(),
-                        message: format!("</{name}> closes <{open}>"),
-                    })
-                }
-                None => {
-                    return Some(WebIssue {
-                        rule: "web/mismatched-tag".to_string(),
-                        message: format!("</{name}> has no opening tag"),
-                    })
-                }
-            }
-            continue;
-        }
-        if tag.ends_with('/') {
-            continue;
-        }
-        let name = tag.split_whitespace().next().unwrap_or("").to_lowercase();
-        if !name.is_empty() && !VOID_ELEMENTS.contains(&name.as_str()) {
-            stack.push(name);
-        }
-    }
-    stack.pop().map(|open| WebIssue {
-        rule: "web/unclosed-tag".to_string(),
-        message: format!("<{open}> is never closed"),
-    })
-}
-
-/// The HTML elements that never have a closing tag.
-const VOID_ELEMENTS: [&str; 14] = [
-    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source",
-    "track", "wbr",
-];
-
-/// The `web-lint` command.
-pub fn web_lint(cfg: &Config) -> Result<i32, String> {
-    let mut report = Report::new("web-lint");
-    let mut scanned = 0usize;
-    for entry in fsutil::walk_files(cfg.root()) {
-        let ext = entry.extension();
-        if !SCANNED_EXTENSIONS.contains(&ext.as_str()) {
-            continue;
-        }
-        let Some(data) = fsutil::read_file(&entry.path) else {
-            continue;
+        let number = |name: &str, fallback: i64| {
+            fs.get(name)
+                .map(|value| value.as_int(fallback))
+                .unwrap_or(fallback)
         };
-        let source = String::from_utf8_lossy(&data);
-        scanned += 1;
-        let issue = match ext.as_str() {
-            ".html" | ".htm" => check_html_tags(&source),
-            _ => check_brackets(&source),
-        };
-        if let Some(issue) = issue {
-            report.add(Diagnostic::error(
-                entry.rel.clone(),
-                issue.rule.clone(),
-                issue.message.clone(),
-            ));
+        Self {
+            project_root: text("project-root"),
+            path: text("path"),
+            content: text("content"),
+            language: text("language"),
+            root: text("root"),
+            ts_engine: text("ts-engine"),
+            tsconfig: text("tsconfig"),
+            ignore: fs
+                .get("ignore")
+                .map(|value| value.as_values().to_vec())
+                .unwrap_or_default(),
+            max_files: number("max-files", DEFAULT_MAX_FILES),
+            max_file_size: number("max-file-size", DEFAULT_MAX_FILE_SIZE),
+            format: text("format"),
+            fail_on: text("fail-on"),
         }
-    }
-    report.extra = Some(serde_json::json!({ "files_scanned": scanned }));
-    if report.ok {
-        report.summary = format!("web-lint: {scanned} file(s) clean");
-        print!("{}", report.render_text());
-        Ok(0)
-    } else {
-        report.summary = format!("web-lint: {} issue(s) found", report.diagnostics.len());
-        print!("{}", report.render_text());
-        Err(report.summary)
     }
 }
 
-/// Whether the path looks like a front-end source.
-pub fn is_web_file(path: &Path) -> bool {
-    let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
-        return false;
-    };
-    SCANNED_EXTENSIONS.contains(&ext)
+/// The `web-lint` command. `args` is everything after the subcommand name.
+pub fn web_lint(args: &[String]) -> Result<i32, String> {
+    let mut fs = flag_set();
+    if let Err(error) = fs.parse(args) {
+        report_parse_error(&error, &fs.render_usage("web-lint"));
+        if matches!(error, ParseError::Help) {
+            print!("{FRIENDLY_USAGE}");
+            return Ok(0);
+        }
+        eprintln!("Error: {error}");
+        return Ok(2);
+    }
+    let options = Options::from(&fs);
+    if let Err(message) = output::validate_mode(&options.format) {
+        eprintln!("web-lint: {message}");
+        eprintln!("Error: {message}");
+        return Ok(2);
+    }
+    match run::run(&options) {
+        Ok(code) => Ok(code),
+        Err(Failure::Usage(error)) => {
+            eprintln!("web-lint: {} ({})", error.message, error.code);
+            eprintln!("Error: {}", error.message);
+            Ok(2)
+        }
+        Err(Failure::Io(message)) => Err(message),
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn detects_unbalanced_brackets() {
-        assert!(check_brackets("function a() {").is_some());
-        assert!(check_brackets("function a() {}").is_none());
-    }
-
-    #[test]
-    fn ignores_brackets_in_strings_and_comments() {
-        assert!(check_brackets("const a = '{';").is_none());
-        assert!(check_brackets("// {\nconst a = 1;").is_none());
-    }
-
-    #[test]
-    fn detects_unclosed_html_tags() {
-        assert!(check_html_tags("<div><p>text</p></div>").is_none());
-        assert!(check_html_tags("<div><p>text</div>").is_some());
-        assert!(check_html_tags("<img src=\"x\"><br>").is_none());
-    }
-}
+mod tests;
