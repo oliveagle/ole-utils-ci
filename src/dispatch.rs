@@ -84,6 +84,9 @@ pub fn dispatch(command: &str, args: &[String]) -> Result<i32, String> {
         // Go hands `logs` its raw args: the command owns a private flag set
         // the shared parser must not see.
         "logs" => commands::logs::logs(args),
+        // Go hands `workflow` its raw args: every subcommand owns a private
+        // flag list the shared parser must not see.
+        "workflow" => commands::workflow::workflow(args),
         // Go hoists `captain-ci-test`'s own flags before handing the rest to
         // the shared parser, so one line can mix both sets.
         "captain-ci-test" => captain_ci_command(&mut cfg, args),

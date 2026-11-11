@@ -41,6 +41,7 @@ pub mod toolchain;
 pub mod upgrade;
 pub mod version;
 pub mod web;
+pub mod workflow;
 
 use crate::cli::FlagSet;
 use crate::config::Config;
