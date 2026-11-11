@@ -10,6 +10,7 @@
 pub mod all;
 pub mod arch;
 pub mod branch_coverage;
+pub mod captain_ci;
 pub mod ci;
 pub mod ci_recipe;
 pub mod ci_recipe_cmd;

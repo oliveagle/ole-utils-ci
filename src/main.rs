@@ -168,6 +168,9 @@ fn dispatch(command: &str, args: &[String]) -> Result<i32, String> {
         // Go hands `logs` its raw args: the command owns a private flag set
         // the shared parser must not see.
         "logs" => commands::logs::logs(args),
+        // Go hoists `captain-ci-test`'s own flags before handing the rest to
+        // the shared parser, so one line can mix both sets.
+        "captain-ci-test" => captain_ci_command(&mut cfg, args),
         "report-bundle" => with_config(commands::reports::report_bundle, &mut cfg, args),
         "verify-dist" => with_config(commands::dist::verify_dist, &mut cfg, args),
         "bump-version" => bump_command(&mut cfg, args, false),
@@ -216,6 +219,13 @@ fn buf_breaking_command(cfg: &mut Config, args: &[String]) -> Result<i32, String
     let (against, rest) = hoist_flag(args, "against", "");
     commands::gates::parse(cfg, &rest)?;
     commands::proto::buf_breaking(cfg, &against)
+}
+
+/// Runs `captain-ci-test`: its own flags come out before the shared parser.
+fn captain_ci_command(cfg: &mut Config, args: &[String]) -> Result<i32, String> {
+    let (options, rest) = commands::captain_ci::split_args(args);
+    commands::gates::parse(cfg, &rest)?;
+    commands::captain_ci::captain_ci_test(cfg, options)
 }
 
 /// Runs `git-author`: the sub-command and `--config` come out before the
