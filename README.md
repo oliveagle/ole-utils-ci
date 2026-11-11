@@ -323,25 +323,22 @@ Unknown fields, raised budgets and profile switches are configuration errors.
 
 ```
 src/
-├── main.rs          # CLI dispatch and usage text
-├── lib.rs           # Module tree and version
-├── cli.rs           # Hand-written, Go-flag-compatible argument parser
-├── config.rs        # Global flags, defaults and hard budgets
-├── quality_config.rs# .devine-utils-ci.jsonc parsing and glob matching
-├── output.rs        # The text/json/toon report contract
-├── fsutil.rs        # File walking and generated-file detection
-├── runner.rs        # External command execution with a timeout
-├── gates/           # The language-agnostic quality gates
-├── rustgate/        # The Rust-specific gates
-└── commands/        # Subcommand wiring
-```
-├── gates/           # The language-agnostic quality gates
-├── rustgate/        # The Rust-specific gates (toolchain, scanner, source)
-├── commands/        # Subcommand wiring, one module per command family
-├── git.rs           # Read-only git plumbing for status/release commands
-├── version.rs       # Version parsing and the bump arithmetic
-├── static_regex.rs  # The one place a `Regex` may be built statically
-└── tests/cli.rs     # End-to-end tests that drive the compiled binary
+├── main.rs           # CLI dispatch and usage text
+├── lib.rs            # Module tree and version
+├── cli.rs            # Hand-written, Go-flag-compatible argument parser
+├── config.rs         # Global flags, defaults and hard budgets
+├── quality_config.rs # .devine-utils-ci.jsonc parsing and glob matching
+├── output.rs         # The text/json/toon report contract
+├── fsutil.rs         # File walking and generated-file detection
+├── runner.rs         # External command execution with a timeout
+├── git.rs            # Read-only git plumbing for status/release commands
+├── version.rs        # Version parsing and the bump arithmetic
+├── static_regex.rs   # The one place a `Regex` may be built statically
+├── process.rs        # Go's wording for a child process that died badly
+├── gates/            # The language-agnostic quality gates
+├── rustgate/         # The Rust-specific gates (toolchain, scanner, source)
+├── commands/         # Subcommand wiring, one module per command family
+└── tests/cli.rs      # End-to-end tests that drive the compiled binary
 ```
 
 ## Development

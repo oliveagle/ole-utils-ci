@@ -25,6 +25,9 @@ release:
 test:
 	$(CARGO) test --all-targets
 
+## lint: fmt-check + clippy (what CI runs before the gates)
+lint: fmt-check clippy
+
 ## fmt: rewrite the sources with rustfmt
 fmt:
 	$(CARGO) fmt --all
