@@ -31,6 +31,8 @@ enum FlagKind {
     Str,
     /// Numeric flag.
     Int,
+    /// Duration flag, stored as nanoseconds.
+    Duration,
     /// Comma-separated list flag, stored as one string.
     List,
 }
@@ -44,6 +46,8 @@ pub enum FlagValue {
     Str(String),
     /// Integer flag.
     Int(i64),
+    /// Duration flag in nanoseconds.
+    Duration(i64),
     /// Comma-separated list flag, split on commas.
     List(Vec<String>),
 }
@@ -69,6 +73,15 @@ impl FlagValue {
     pub fn as_int(&self, default: i64) -> i64 {
         match self {
             FlagValue::Int(v) => *v,
+            _ => default,
+        }
+    }
+
+    /// Returns the duration payload in nanoseconds, or `default` for
+    /// other kinds.
+    pub fn as_duration(&self, default: i64) -> i64 {
+        match self {
+            FlagValue::Duration(v) => *v,
             _ => default,
         }
     }
@@ -135,6 +148,11 @@ pub struct FlagSet {
     values: BTreeMap<String, FlagValue>,
     provided: BTreeSet<String>,
     aliases: BTreeMap<String, String>,
+    /// The help text attached to a flag by [`FlagSet::describe`].
+    usages: BTreeMap<String, String>,
+    /// The registered default of each flag, spelled the way Go's `flag`
+    /// records `DefValue`.
+    defs: BTreeMap<String, String>,
     /// Positional arguments left after the flags.
     pub args: Vec<String>,
 }
@@ -150,6 +168,7 @@ impl FlagSet {
         self.kinds.insert(name.to_string(), FlagKind::Bool);
         self.values
             .insert(name.to_string(), FlagValue::Bool(default));
+        self.defs.insert(name.to_string(), default.to_string());
         self
     }
 
@@ -158,6 +177,7 @@ impl FlagSet {
         self.kinds.insert(name.to_string(), FlagKind::Str);
         self.values
             .insert(name.to_string(), FlagValue::Str(default.to_string()));
+        self.defs.insert(name.to_string(), default.to_string());
         self
     }
 
@@ -166,6 +186,18 @@ impl FlagSet {
         self.kinds.insert(name.to_string(), FlagKind::Int);
         self.values
             .insert(name.to_string(), FlagValue::Int(default));
+        self.defs.insert(name.to_string(), default.to_string());
+        self
+    }
+
+    /// Registers a duration flag (`5s`, `10m`, `1h30m`) with its default,
+    /// spelled the way Go's `time.Duration.String` spells it.
+    pub fn duration_flag(&mut self, name: &str, default: &str) -> &mut Self {
+        let nanos = goparse::parse_duration(default).unwrap_or(0);
+        self.kinds.insert(name.to_string(), FlagKind::Duration);
+        self.values
+            .insert(name.to_string(), FlagValue::Duration(nanos));
+        self.defs.insert(name.to_string(), duration_string(nanos));
         self
     }
 
@@ -174,6 +206,14 @@ impl FlagSet {
         self.kinds.insert(name.to_string(), FlagKind::List);
         self.values
             .insert(name.to_string(), FlagValue::List(default.to_vec()));
+        self.defs.insert(name.to_string(), default.join(","));
+        self
+    }
+
+    /// Attaches the help text Go's `flag` would print for `name` in its
+    /// `PrintDefaults` block.
+    pub fn describe(&mut self, name: &str, usage: &str) -> &mut Self {
+        self.usages.insert(name.to_string(), usage.to_string());
         self
     }
 
@@ -283,6 +323,14 @@ impl FlagSet {
                         reason: e.as_str().to_string(),
                     })
             }
+            // Go's durationValue reports every refusal as `parse error`.
+            FlagKind::Duration => goparse::parse_duration(&raw)
+                .map(FlagValue::Duration)
+                .ok_or_else(|| ParseError::InvalidValue {
+                    name: name.to_string(),
+                    value: raw,
+                    reason: "parse error".to_string(),
+                }),
             // Go splits on commas without trimming: `strings.Split(value, ",")`.
             FlagKind::List => Ok(FlagValue::List(raw.split(',').map(String::from).collect())),
             FlagKind::Bool => match parse_go_bool(&raw) {
@@ -297,6 +345,44 @@ impl FlagSet {
     }
 }
 
+/// `time.Duration.String` for the values a flag default can hold: whole
+/// seconds first, then the smaller units, with the sign out front.
+fn duration_string(nanos: i64) -> String {
+    if nanos == 0 {
+        return "0s".to_string();
+    }
+    let sign = if nanos < 0 { "-" } else { "" };
+    let mut rest = nanos.unsigned_abs() as u128;
+    let hours = rest / 3_600_000_000_000;
+    rest %= 3_600_000_000_000;
+    let minutes = rest / 60_000_000_000;
+    rest %= 60_000_000_000;
+    let mut out = String::new();
+    if hours > 0 {
+        out.push_str(&format!("{hours}h"));
+    }
+    if minutes > 0 {
+        out.push_str(&format!("{minutes}m"));
+    }
+    if hours > 0 || minutes > 0 || rest >= 1_000_000_000 {
+        let secs = rest / 1_000_000_000;
+        let frac = rest % 1_000_000_000;
+        if frac == 0 {
+            out.push_str(&format!("{secs}s"));
+        } else {
+            let digits = format!("{frac:09}");
+            out.push_str(&format!("{}.{}s", secs, digits.trim_end_matches('0')));
+        }
+    } else if rest >= 1_000_000 {
+        out.push_str(&format!("{}ms", rest / 1_000_000));
+    } else if rest >= 1_000 {
+        out.push_str(&format!("{}us", rest / 1_000));
+    } else {
+        out.push_str(&format!("{rest}ns"));
+    }
+    format!("{sign}{out}")
+}
+
 /// `strconv.ParseBool`: exactly the spellings Go's boolean flags accept.
 fn parse_go_bool(raw: &str) -> Option<bool> {
     match raw {
@@ -306,7 +392,9 @@ fn parse_go_bool(raw: &str) -> Option<bool> {
     }
 }
 
+mod local;
 mod usage;
+pub use local::report_parse_error;
 pub use usage::GLOBAL_USAGE;
 
 #[cfg(test)]

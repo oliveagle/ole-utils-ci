@@ -146,6 +146,9 @@ fn dispatch(command: &str, args: &[String]) -> Result<i32, String> {
         "buf-breaking" => buf_breaking_command(&mut cfg, args),
         "ci-go-env" | "ci_go_env" => go_env_command(&mut cfg, args),
         "git-author" => git_author_command(&mut cfg, args),
+        // Go hands `ci-recipe` its raw args: each subcommand owns a private
+        // flag set the shared parser must not see.
+        "ci-recipe" => commands::ci_recipe_cmd::ci_recipe(args),
         // Go hands `kms-stub` its raw args: the command owns a private flag
         // set and the global flags must not reach it.
         "kms-stub" => commands::kms_stub_cmd::kms_stub(args),
