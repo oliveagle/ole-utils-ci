@@ -24,6 +24,7 @@ pub mod runner;
 pub mod rustgate;
 pub mod static_regex;
 pub mod version;
+pub mod xml;
 
 /// Version of the tool. Kept in sync with the repository `VERSION` file and
 /// injected at release time by `bump-version`.

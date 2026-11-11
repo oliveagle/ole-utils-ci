@@ -9,6 +9,7 @@
 //! and the verbosity flag, and every invocation has a wall-clock timeout so a
 //! hung toolchain fails the gate instead of hanging CI.
 
+use std::io::{Read, Write};
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -197,6 +198,130 @@ fn is_executable(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+impl Runner {
+    /// Runs `producer | consumer > out_path` without a shell.
+    ///
+    /// The Go original builds the pipe by hand so the same code works on
+    /// Windows, and so `sh -c` never enters the picture: the producer's
+    /// standard output *and* standard error both feed the consumer's stdin
+    /// (the template's `2>&1`), the consumer's standard output lands in
+    /// `out_path`, and its standard error stays on the terminal.
+    ///
+    /// A producer failure is forgiven when the consumer succeeded and wrote
+    /// something — the normal early-close case of a pipe.
+    pub fn run_pipe(
+        &self,
+        producer: &[&str],
+        consumer: &[&str],
+        out_path: &Path,
+    ) -> Result<(), String> {
+        if producer.is_empty() || consumer.is_empty() {
+            return Err("run_pipe: empty command".to_string());
+        }
+        if self.verbose {
+            println!(
+                "[pipe] {} | {} > {}",
+                producer.join(" "),
+                consumer.join(" "),
+                out_path.display()
+            );
+        }
+        let file = std::fs::File::create(out_path)
+            .map_err(|e| format!("create {}: {e}", out_path.display()))?;
+        let mut consumer_child = Command::new(consumer[0])
+            .args(&consumer[1..])
+            .current_dir(&self.dir)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::from(file))
+            .stderr(Stdio::inherit())
+            .spawn()
+            .map_err(|e| format!("start {}: {e}", consumer[0]))?;
+        let mut producer_child = Command::new(producer[0])
+            .args(&producer[1..])
+            .current_dir(&self.dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| {
+                let _ = consumer_child.kill();
+                let _ = consumer_child.wait();
+                format!("start {}: {e}", producer[0])
+            })?;
+
+        let stdin = consumer_child
+            .stdin
+            .take()
+            .ok_or_else(|| format!("start {}: stdin unavailable", consumer[0]))?;
+        let sink = std::sync::Arc::new(std::sync::Mutex::new(stdin));
+        let stdout = producer_child
+            .stdout
+            .take()
+            .ok_or_else(|| format!("start {}: stdout unavailable", producer[0]))?;
+        let stderr = producer_child
+            .stderr
+            .take()
+            .ok_or_else(|| format!("start {}: stderr unavailable", producer[0]))?;
+        let mut handles = Vec::new();
+        for source in [Box::new(stdout) as Box<dyn Read + Send>, Box::new(stderr)] {
+            let sink = std::sync::Arc::clone(&sink);
+            handles.push(std::thread::spawn(move || drain(source, sink)));
+        }
+        drop(sink);
+        for handle in handles {
+            let _ = handle.join();
+        }
+
+        let producer_status = producer_child
+            .wait()
+            .map_err(|e| format!("wait {}: {e}", producer[0]))?;
+        let consumer_status = consumer_child
+            .wait()
+            .map_err(|e| format!("wait {}: {e}", consumer[0]))?;
+        if !consumer_status.success() {
+            return Err(format!("{}: {}", consumer[0], exit_text(&consumer_status)));
+        }
+        if !producer_status.success() {
+            let written = std::fs::metadata(out_path).map(|m| m.len()).unwrap_or(0);
+            if written > 0 {
+                return Ok(());
+            }
+            return Err(format!("{}: {}", producer[0], exit_text(&producer_status)));
+        }
+        Ok(())
+    }
+}
+
+/// Copies one producer stream into the consumer's stdin until EOF.
+fn drain(
+    mut source: Box<dyn Read + Send>,
+    sink: std::sync::Arc<std::sync::Mutex<std::process::ChildStdin>>,
+) {
+    let mut buffer = [0u8; 8192];
+    loop {
+        match source.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(count) => match sink.lock() {
+                Ok(mut stdin) => {
+                    if stdin.write_all(&buffer[..count]).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            },
+            Err(_) => break,
+        }
+    }
+}
+
+/// Go's `ExitError.Error()` wording: `exit status 3`, or `signal: killed`.
+fn exit_text(status: &std::process::ExitStatus) -> String {
+    match status.code() {
+        Some(code) => format!("exit status {code}"),
+        None => "signal: killed".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -231,5 +356,33 @@ mod tests {
             .run("sh", &["-c", "printf '%s' \"$DEVINE_UTILS_CI_PROBE\""])
             .unwrap();
         assert_eq!(out, "yes");
+    }
+
+    #[test]
+    fn pipes_producer_output_into_the_consumer() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("out.txt");
+        let r = Runner::new(".", false);
+        r.run_pipe(&["sh", "-c", "printf abc; printf def >&2"], &["cat"], &out)
+            .unwrap();
+        let got = std::fs::read_to_string(&out).unwrap();
+        let mut chars: Vec<char> = got.chars().collect();
+        chars.sort_unstable();
+        assert_eq!(chars, vec!['a', 'b', 'c', 'd', 'e', 'f'], "{got}");
+    }
+
+    #[test]
+    fn reports_consumer_failures() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("out.txt");
+        let r = Runner::new(".", false);
+        let err = r
+            .run_pipe(
+                &["sh", "-c", "printf abc"],
+                &["sh", "-c", "cat >/dev/null; exit 4"],
+                &out,
+            )
+            .unwrap_err();
+        assert!(err.contains("exit status 4"), "{err}");
     }
 }
