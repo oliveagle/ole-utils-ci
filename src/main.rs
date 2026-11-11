@@ -141,6 +141,7 @@ fn dispatch(command: &str, args: &[String]) -> Result<i32, String> {
         "arch" => with_config(commands::arch::arch, &mut cfg, args),
         "buf-lint" => with_config(commands::proto::buf_lint, &mut cfg, args),
         "web-lint" => with_config(commands::web::web_lint, &mut cfg, args),
+        "release" => with_config(commands::release_cmd::release, &mut cfg, args),
         "release-model" => with_config(commands::release_model::release_model, &mut cfg, args),
         "buf-generate" => with_config(commands::proto::buf_generate, &mut cfg, args),
         "buf-breaking" => buf_breaking_command(&mut cfg, args),
@@ -149,6 +150,9 @@ fn dispatch(command: &str, args: &[String]) -> Result<i32, String> {
         // Go hands `ci-recipe` its raw args: each subcommand owns a private
         // flag set the shared parser must not see.
         "ci-recipe" => commands::ci_recipe_cmd::ci_recipe(args),
+        // Go hands `protect-set` its raw args: the command owns a flat flag
+        // list the shared parser must not see.
+        "protect-set" => commands::protect_set::protect_set(args),
         // Go hands `kms-stub` its raw args: the command owns a private flag
         // set and the global flags must not reach it.
         "kms-stub" => commands::kms_stub_cmd::kms_stub(args),
