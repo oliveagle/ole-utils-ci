@@ -153,6 +153,9 @@ fn dispatch(command: &str, args: &[String]) -> Result<i32, String> {
         // Go hands `protect-set` its raw args: the command owns a flat flag
         // list the shared parser must not see.
         "protect-set" => commands::protect_set::protect_set(args),
+        // Go hands `upgrade` its raw args: the command owns a private flag
+        // set the shared parser must not see.
+        "upgrade" => commands::upgrade::upgrade(args),
         // Go hands `kms-stub` its raw args: the command owns a private flag
         // set and the global flags must not reach it.
         "kms-stub" => commands::kms_stub_cmd::kms_stub(args),

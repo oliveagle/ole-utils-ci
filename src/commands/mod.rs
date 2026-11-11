@@ -35,6 +35,7 @@ pub mod reports;
 pub mod rust;
 pub mod tengo;
 pub mod toolchain;
+pub mod upgrade;
 pub mod version;
 pub mod web;
 
