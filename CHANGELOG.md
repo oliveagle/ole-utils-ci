@@ -32,6 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitLab commands: `pipeline-run`, `logs` and `captain-ci-test`, each verified
   against the Go binary on stdout, stderr, exit code and — for the two that
   post a body — the exact request bytes.
+- Release workflow: `workflow` with its `list`, `apps`, `release-rc`,
+  `test-rc`, `integration-rc`, `deploy-prod`, `promote`, `prod-verify`,
+  `scenarios` and `status` subcommands, plus named-workflow dispatch
+  (`workflow <name> <subcommand>`) and the built-in → user → repo →
+  `--config` layering. Verified against the Go binary on stdout, stderr and
+  exit code, and covered by unit tests that pin the gate wording, the
+  release/promote flows and the Captain/FAAS handshake.
 - Downstream tooling: `ci-recipe` (with its `list` / `url` / `script` /
   `download` subcommands) and `upgrade`.
 - Integration tests in `tests/cli.rs` that drive the compiled binary and pin
@@ -59,8 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Not yet ported
 
-- `pipeline-watch` (the interactive TUI dashboard) and `workflow` (the named
-  release/test workflow driver) remain Go-only.
+- `pipeline-watch` (the interactive TUI dashboard) remains Go-only.
 
 ### Known divergences
 

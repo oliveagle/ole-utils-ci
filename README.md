@@ -143,6 +143,33 @@ devine-utils-ci all --output toon
 | `logs` | Query or tail Clog logs (needs `OSG_CLOG_TOKEN`). |
 | `captain-ci-test` | Reproduce the Captain-CI Test job artifacts. |
 
+### Release workflow
+
+`workflow` drives the binary release + test flow. The topology is DATA kept
+with the repo: a repo-committed `.devine/workflow.yaml` (walked up from the
+working directory to the git root) is the source of truth, and the binary
+ships a built-in fallback so the command works with no config file at all.
+Precedence, lowest to highest: built-in → `~/.devine/utils/workflow.yaml` →
+`.devine/workflow.yaml` → `--config PATH`. Any layer may override any
+workflow by name, including the built-in one.
+
+| Command | What it does |
+|---------|--------------|
+| `workflow list` | Enumerate every named workflow (built-in + user-declared). |
+| `workflow apps` | List the test FAAS apps catalog. |
+| `workflow release-rc` | Bump an rc on the binary repo `main` + push `main`+tag → verify UAT only. |
+| `workflow test-rc` | Trigger the dev-test app pipeline + poll `/version`. |
+| `workflow integration-rc` | Trigger the integration app(s) + optional `/version` check. |
+| `workflow deploy-prod` | Publish the latest main image to the Captain PROD groups + auto-rollout + spec verify. |
+| `workflow promote` | Bump rc → stable on the binary repo `main` + push + verify PROD. Gated on integration-01. |
+| `workflow prod-verify` | Verify a STABLE release end to end: PROD artifact + each app's `/version`. |
+| `workflow scenarios` | Run the MCP scenario matrix against the integration apps. |
+| `workflow status` | One-shot snapshot: VERSION, tags, artifactory, test apps. |
+
+`workflow <name> <subcommand>` runs a named workflow; `workflow <subcommand>`
+runs the default one (`devine-golang-mcp-app`). Every subcommand takes
+`--config <path>`, `--dry-run`, `--output text|json` and `--verbose`.
+
 ### Downstream tooling
 
 | Command | What it does |
@@ -152,9 +179,8 @@ devine-utils-ci all --output toon
 
 ### Not yet ported
 
-`pipeline-watch` (the interactive TUI dashboard) and `workflow` (the named
-release/test workflow driver) are still Go-only. Everything else in the Go
-command surface is implemented here.
+`pipeline-watch` (the interactive TUI dashboard) is still Go-only. Everything
+else in the Go command surface is implemented here.
 
 Every command accepts `--output json` or `--output toon` where it reports
 findings, and every command exits `0` on success, `1` on a failed check or an
