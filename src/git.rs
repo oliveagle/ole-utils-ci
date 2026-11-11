@@ -94,6 +94,48 @@ pub fn recent_commits(root: &Path, count: usize) -> Vec<String> {
     out.lines().map(|l| l.to_string()).collect()
 }
 
+/// Runs git the way Go's `internal.Runner` does.
+///
+/// The Go runner hands back stdout and stderr concatenated, and a failure
+/// carries both the exec error and that combined output:
+/// `git status --porcelain failed: exit status 128\nOutput:\nfatal: …`.
+/// `release-check` quotes those words verbatim, so it needs this shape
+/// rather than [`run`]'s shorter message.
+pub fn run_go(root: &Path, args: &[&str]) -> Result<String, String> {
+    let output = match Command::new("git").current_dir(root).args(args).output() {
+        Ok(output) => output,
+        Err(error) => {
+            return Err(format!(
+                "git {} failed: {}\nOutput:\n",
+                args.join(" "),
+                spawn_error(&error)
+            ))
+        }
+    };
+    let mut combined = String::from_utf8_lossy(&output.stdout).into_owned();
+    combined.push_str(&String::from_utf8_lossy(&output.stderr));
+    if !output.status.success() {
+        return Err(format!(
+            "git {} failed: {}\nOutput:\n{}",
+            args.join(" "),
+            crate::process::exit_status(&output.status),
+            combined
+        ));
+    }
+    Ok(combined)
+}
+
+/// Go's `exec.Error` for a `git` that never started.
+fn spawn_error(error: &std::io::Error) -> String {
+    if error.kind() == std::io::ErrorKind::NotFound {
+        return "exec: \"git\": executable file not found in $PATH".to_string();
+    }
+    format!(
+        "exec: \"git\": {}",
+        crate::commands::ci_recipe_util::go_errno(error)
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

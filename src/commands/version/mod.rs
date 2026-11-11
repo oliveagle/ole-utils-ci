@@ -8,20 +8,26 @@
 //! git tag of a release is `v<VERSION>`. The commands here keep the three in
 //! sync and refuse to release when they disagree.
 
+mod branchcheck;
 pub mod bump;
 pub mod cargo;
 pub mod check;
+mod cleantree;
 pub mod release;
+mod releasecheck;
 
 pub use check::version_check;
 
 use crate::config::Config;
 use crate::git;
-use crate::output::{Diagnostic, Report};
 use crate::version::{tag_for, Version};
 
 /// The name of the version file.
 pub const VERSION_FILE: &str = "VERSION";
+
+/// The marker `release-finish` embeds in every stable tag it creates and
+/// `release-check` insists on (ADR 0001).
+pub const RELEASE_TAG_MARKER: &str = "[released via devine-utils-ci release-finish]";
 
 /// Reads and parses the `VERSION` file of `root`.
 pub fn read_version(root: &std::path::Path) -> Result<Version, String> {
@@ -76,85 +82,10 @@ pub fn gather(cfg: &Config) -> Result<VersionState, String> {
 
 /// The `release-check` command: the pre-release gate.
 ///
-/// The version must be valid, the manifest must agree with it, the tree must
-/// be clean and the checkout must sit on the release branch.
+/// The whole check lives in [`releasecheck`], which follows the Go
+/// original's order and stops at the first broken invariant.
 pub fn release_check(cfg: &Config) -> Result<i32, String> {
-    let state = gather(cfg)?;
-    let mut report = Report::new("release-check");
-    if let Some(cargo_version) = &state.cargo_version {
-        if cargo_version != &state.version.to_string() {
-            report.add(Diagnostic::error(
-                "Cargo.toml",
-                "release/version-mismatch",
-                format!(
-                    "Cargo.toml declares {cargo_version} but VERSION says {}",
-                    state.version
-                ),
-            ));
-        }
-    }
-    if !git::is_repository(cfg.root()) {
-        report.add(Diagnostic::error(
-            "",
-            "release/not-a-repository",
-            "the project is not a git repository",
-        ));
-    } else {
-        if state.branch != "main" && state.branch != "master" {
-            report.add(Diagnostic::error(
-                "",
-                "release/wrong-branch",
-                format!(
-                    "the release must run from the main branch, not {}",
-                    state.branch
-                ),
-            ));
-        }
-        if !git::is_clean(cfg.root()) {
-            report.add(Diagnostic::error(
-                "",
-                "release/dirty-tree",
-                "the working tree has uncommitted changes",
-            ));
-        }
-    }
-    report.extra = Some(serde_json::json!({
-        "version": state.version.to_string(),
-        "tag": state.expected_tag,
-        "tag_exists": state.tag_exists,
-        "branch": state.branch,
-    }));
-    // Go keeps the historical silent-on-success behaviour: without
-    // `--output` a clean release prints nothing and a broken one is only the
-    // `Error:` line on stderr.
-    let failure = report
-        .diagnostics
-        .first()
-        .map(|issue| issue.message.clone())
-        .unwrap_or_else(|| "release state is inconsistent".to_string());
-    if cfg.output.is_empty() {
-        if report.ok {
-            return Ok(0);
-        }
-        return Err(failure);
-    }
-    // With a mode selected Go rebuilds the payload around the one error it
-    // returned: its own summary and a single `release-check` diagnostic.
-    let mut payload = Report::new("release-check");
-    payload.extra = Some(serde_json::json!({ "release_model": cfg.release_model }));
-    if report.ok {
-        payload.summary =
-            "release-check: release state consistent (VERSION, tag, branch, tree)".to_string();
-    } else {
-        payload.summary = "release-check: release state inconsistent".to_string();
-        payload.add(Diagnostic::error("", "release-check", failure.clone()));
-    }
-    print!("{}", payload.render(crate::output::parse_mode(&cfg.output)));
-    if report.ok {
-        Ok(0)
-    } else {
-        Err(failure)
-    }
+    releasecheck::run(cfg)
 }
 
 #[cfg(test)]

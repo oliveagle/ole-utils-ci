@@ -151,7 +151,7 @@ impl Version {
             Bump::Promote => {
                 if !self.is_rc {
                     return Err(format!(
-                        "current version {self} is already stable — nothing to promote"
+                        "current version \"{self}\" is already stable — nothing to promote"
                     ));
                 }
                 Ok(self.stable())
@@ -163,7 +163,7 @@ impl Version {
     fn reject_rc(&self, action: &str) -> Result<(), String> {
         if self.is_rc {
             return Err(format!(
-                "current version {self} is an rc candidate — run promote first to publish the stable version, then {action} again"
+                "current version \"{self}\" is an rc candidate — run promote first to publish the stable version, then {action} again"
             ));
         }
         Ok(())

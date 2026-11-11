@@ -63,3 +63,14 @@ pub fn parse_global(cfg: &mut Config, args: &[String]) -> Result<Vec<String>, St
 
 /// The exit code a command returns.
 pub type ExitCode = i32;
+
+/// Checks the release model the way Go's `validateReleaseModel` does — the
+/// empty string is not a model, so running with no `--release-model` fails.
+pub(crate) fn validate_release_model(model: &str) -> Result<(), String> {
+    match model {
+        "simple" | "strict" => Ok(()),
+        other => Err(format!(
+            "unknown release model {other:?} — use 'simple' or 'strict'"
+        )),
+    }
+}

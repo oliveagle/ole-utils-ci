@@ -10,7 +10,7 @@
 //! this module holds the result type and the four helpers they all need.
 
 use std::path::Path;
-use std::process::{Command, ExitStatus, Output};
+use std::process::{Command, Output};
 use std::time::Duration;
 
 use crate::commands::ci_recipe_util::go_errno;
@@ -123,66 +123,6 @@ fn is_executable(path: &Path) -> bool {
         Ok(metadata) => !metadata.is_dir() && metadata.permissions().mode() & 0o111 != 0,
         Err(_) => false,
     }
-}
-
-/// Go's `ExitError.Error()`: `exit status 3`, or `signal:` followed by the
-/// name `syscall.Signal.String()` gives the signal and the core-dump note
-/// `ProcessState.String()` appends.
-pub(super) fn exit_status(status: &ExitStatus) -> String {
-    if let Some(code) = status.code() {
-        return format!("exit status {code}");
-    }
-    use std::os::unix::process::ExitStatusExt;
-    let Some(signal) = status.signal() else {
-        return "signal: killed".to_string();
-    };
-    let mut text = match signal_name(signal) {
-        Some(name) => format!("signal: {name}"),
-        None => format!("signal: signal {signal}"),
-    };
-    if status.core_dumped() {
-        text.push_str(" (core dumped)");
-    }
-    text
-}
-
-/// Go's `syscall.Signal.String()` for the signals a child can die from;
-/// `None` is the fallback Go spells `signal <n>`.
-fn signal_name(signal: i32) -> Option<&'static str> {
-    Some(match signal {
-        1 => "hangup",
-        2 => "interrupt",
-        3 => "quit",
-        4 => "illegal instruction",
-        5 => "trace/breakpoint trap",
-        6 => "aborted",
-        7 => "bus error",
-        8 => "floating point exception",
-        9 => "killed",
-        10 => "user defined signal 1",
-        11 => "segmentation fault",
-        12 => "user defined signal 2",
-        13 => "broken pipe",
-        14 => "alarm clock",
-        15 => "terminated",
-        16 => "stack fault",
-        17 => "child exited",
-        18 => "continued",
-        19 => "stopped (signal)",
-        20 => "stopped",
-        21 => "stopped (tty input)",
-        22 => "stopped (tty output)",
-        23 => "urgent I/O condition",
-        24 => "CPU time limit exceeded",
-        25 => "file size limit exceeded",
-        26 => "virtual timer expired",
-        27 => "profiling timer expired",
-        28 => "window changed",
-        29 => "I/O possible",
-        30 => "power failure",
-        31 => "bad system call",
-        _ => return None,
-    })
 }
 
 /// The two streams of one `Output`, stdout first: what `CombinedOutput`

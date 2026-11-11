@@ -81,17 +81,6 @@ fn assign(cfg: &mut ProtectSet, name: &str, value: &str) {
     }
 }
 
-/// Checks the release model the way `validateReleaseModel` does — the empty
-/// string is not a model, so running with no `--release-model` fails.
-fn validate_release_model(model: &str) -> Result<(), String> {
-    match model {
-        "simple" | "strict" => Ok(()),
-        other => Err(format!(
-            "unknown release model {other:?} — use 'simple' or 'strict'"
-        )),
-    }
-}
-
 /// One API exchange; the status is all the caller needs, so transport errors
 /// collapse to status 0 exactly like the Go `code, _ := call_api(...)` calls.
 fn call_api(base_url: &str, token: &str, method: &str, path: &str, body: Option<&str>) -> u16 {
@@ -128,7 +117,7 @@ pub fn protect_set(args: &[String]) -> Result<i32, String> {
     if cfg.project_id.is_empty() {
         return Err("--project-id is required".to_string());
     }
-    validate_release_model(&cfg.release_model)?;
+    crate::commands::validate_release_model(&cfg.release_model)?;
 
     let base = cfg.base_url.as_str();
     let token = cfg.token.as_str();
@@ -258,11 +247,11 @@ mod tests {
 
     #[test]
     fn model_validation_matches_go() {
-        assert!(validate_release_model("simple").is_ok());
-        assert!(validate_release_model("strict").is_ok());
-        let err = validate_release_model("").unwrap_err();
+        assert!(crate::commands::validate_release_model("simple").is_ok());
+        assert!(crate::commands::validate_release_model("strict").is_ok());
+        let err = crate::commands::validate_release_model("").unwrap_err();
         assert_eq!(err, "unknown release model \"\" — use 'simple' or 'strict'");
-        let err = validate_release_model("bogus").unwrap_err();
+        let err = crate::commands::validate_release_model("bogus").unwrap_err();
         assert_eq!(
             err,
             "unknown release model \"bogus\" — use 'simple' or 'strict'"

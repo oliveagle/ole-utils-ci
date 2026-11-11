@@ -71,6 +71,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a Go map, and Go renders maps in key order; the Rust renderer used to leak
   struct declaration order instead. JSON output is unchanged: it keeps
   declaration order, the way `json.Marshal` does for a struct.
+- `release-check`, `bump-version`, `release-start` and `release-finish` now
+  follow the Go original's order, wording and side effects end to end: the
+  release model is validated first, `release-check` reports the first broken
+  invariant instead of only the first dirty file, `bump-version` prints Go's
+  banner and trailer and refuses a foreign change the way Go does,
+  `release-start` honours `simple` (bump on `main`) versus `strict`
+  (`chore/release-v<NEXT>`) — including Go's decision to ignore `--dry-run`
+  there — and `release-finish` stamps the ADR 0001 marker into the tag it
+  pushes, which is what makes a Rust-made tag pass `release-check`.
 - `pipeline-watch` drives the Go original's *legacy* dashboard loop, which
   repaints the whole frame on every change. The Go TUI uses the alternate
   screen buffer and diffs the frames instead, so it keeps the scrollback and
@@ -96,9 +105,9 @@ These are deliberate; each is documented at the code that causes it.
   into it; the wrapper here delegates to `gomut` on `PATH`, which may be a
   different release. Everything else — the `--project-root` lift, the exit
   codes and the pass-through of every other argument — is the Go behaviour.
-- `release-check` names its first failure where Go prints the whole
-  dirty-file list.
-- `bump-version` and `release-start` print a different summary.
+- `bump-version` also prints `✓ Cargo.toml synced to <version>` when it
+  rewrites this crate's own `Cargo.toml`. The Go original has no such file;
+  every other line it prints is Go's.
 - `buf-breaking --against <ref>` is accepted here because Go's own `--help`
   advertises it; Go's flag parser rejects the flag as undefined.
 - `arch` also scans Cargo modules and recognises a layer from any path

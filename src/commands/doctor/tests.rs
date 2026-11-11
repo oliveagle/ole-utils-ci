@@ -160,14 +160,17 @@ fn exit_status_is_worded_the_way_go_words_it() {
         .arg("exit 3")
         .output()
         .expect("sh");
-    assert_eq!(checks::exit_status(&exited.status), "exit status 3");
+    assert_eq!(crate::process::exit_status(&exited.status), "exit status 3");
 
     let killed = Command::new("sh")
         .arg("-c")
         .arg("kill -9 $$")
         .output()
         .expect("sh");
-    assert_eq!(checks::exit_status(&killed.status), "signal: killed");
+    assert_eq!(
+        crate::process::exit_status(&killed.status),
+        "signal: killed"
+    );
 }
 
 #[test]

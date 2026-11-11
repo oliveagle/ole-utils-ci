@@ -21,8 +21,13 @@ pub fn read_version(root: &Path) -> Option<String> {
 /// Returns `Ok(false)` when the manifest has no `version` field to update.
 pub fn write_version(root: &Path, version: &str) -> Result<bool, String> {
     let path = root.join("Cargo.toml");
-    let raw =
-        std::fs::read_to_string(&path).map_err(|e| format!("failed to read Cargo.toml: {e}"))?;
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        // Go has no manifest to keep in step, and a project without one is
+        // not an error: there is simply nothing to sync.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(format!("failed to read Cargo.toml: {error}")),
+    };
     let updated = set_package_field(&raw, "version", version);
     match updated {
         Some(text) => {

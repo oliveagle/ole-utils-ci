@@ -13,7 +13,8 @@
 use std::io::ErrorKind;
 use std::path::Path;
 
-use super::checks::{combined, exit_status, go, Check};
+use super::checks::{combined, go, Check};
+use crate::process::exit_status;
 
 /// `checkVendorConsistency` followed by `checkGoModTidy`, in the order the
 /// Go original appends them.

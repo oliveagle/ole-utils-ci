@@ -8,7 +8,6 @@
 use devine_utils_ci::commands;
 use devine_utils_ci::config::Config;
 use devine_utils_ci::gates;
-use devine_utils_ci::version;
 
 use crate::{print_usage, GATE_COMMANDS};
 
@@ -186,14 +185,55 @@ pub fn with_config(
     run(cfg)
 }
 
-/// Parses the bump type for `bump-version` and `release-start`.
+/// Resolves the bump type for `bump-version` and `release-start`.
+///
+/// `bump-version` hoists `--bump <action>` out before the shared parser
+/// sees it, because Go's `runBumpVersion` does the same and lets a wrapper
+/// pass the named flag instead of a positional. `release-start` has no such
+/// flag, so its args go over untouched and the flag is rejected the way Go
+/// rejects it. The text is parsed by the command itself: Go only validates
+/// it after its banner, its project-config load and its `VERSION` read.
 pub fn bump_command(cfg: &mut Config, args: &[String], release: bool) -> Result<i32, String> {
-    let rest = commands::gates::parse(cfg, args)?;
-    let raw = rest.first().map(String::as_str).unwrap_or("");
-    let bump = version::parse_bump(raw)?;
+    let mut explicit = None;
+    let mut rest: Vec<String> = Vec::with_capacity(args.len());
     if release {
-        commands::version::release::release_start(cfg, bump)
+        rest.extend_from_slice(args);
     } else {
-        commands::version::bump::bump_version(cfg, bump)
+        let mut index = 0;
+        while index < args.len() {
+            let arg = &args[index];
+            if arg == "--bump" && index + 1 < args.len() {
+                explicit = Some(args[index + 1].clone());
+                index += 2;
+                continue;
+            }
+            if let Some(value) = arg.strip_prefix("--bump=") {
+                explicit = Some(value.to_string());
+            } else {
+                rest.push(arg.clone());
+            }
+            index += 1;
+        }
+    }
+    let positional = commands::gates::parse(cfg, &rest)?;
+    let raw = match explicit {
+        Some(value) => value,
+        None if release => positional
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "patch".to_string()),
+        None => {
+            let first = positional.first().map(String::as_str).unwrap_or("");
+            if first.is_empty() || first.starts_with('-') {
+                "patch".to_string()
+            } else {
+                first.to_string()
+            }
+        }
+    };
+    if release {
+        commands::version::release::release_start(cfg, &raw)
+    } else {
+        commands::version::bump::bump_version(cfg, &raw)
     }
 }

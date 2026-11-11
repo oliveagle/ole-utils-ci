@@ -21,6 +21,7 @@ pub mod goparse;
 pub mod httpd;
 pub mod lint_config;
 pub mod output;
+pub mod process;
 pub mod quality_config;
 pub mod runner;
 pub mod rustgate;
