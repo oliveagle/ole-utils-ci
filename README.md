@@ -273,9 +273,11 @@ make blaze-test     # run the tests with blaze
 ```
 
 The repository dogfoods the tool: `make gate` runs every gate against this
-repository and must stay green. In particular the source budget is 300/450
-lines and the complexity budget is 12/18 (see `.devine-utils-ci.jsonc`), both
-tighter than the built-in defaults.
+repository and must stay green — including `ci-go-env`, which scans the tree
+for likely credentials. In particular the source budget is 300/450 lines and
+the complexity budget is 12/18 (see `.devine-utils-ci.jsonc`), both tighter
+than the built-in defaults; the tree currently sits inside both warning
+thresholds, so a `make gate` run reports no warnings at all.
 
 `scripts/blaze.sh` wraps `blaze` and restarts its daemon with
 `BLAZE_SANDBOX=off`, because container images that block

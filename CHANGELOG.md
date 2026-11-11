@@ -43,6 +43,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The repository runs its own gates with no warnings at all: every source file
+  is inside the 300-line advisory budget and every function is below the
+  complexity warning threshold. The splits are mechanical — flag parsing, the
+  XML cursor, the outbound HTTP exchange, the command table, the watch config,
+  the git-author policy, the go-env line checks, the upgrade release API and
+  the oversized test modules — and behaviour is unchanged.
+- `make gate` also runs `ci-go-env`, so the credential scan is part of the
+  repository's own quality bar.
 - `--output toon` now sorts every object's keys, recursively. Go's TOON path
   round-trips the payload through `encoding/json`, which turns each object into
   a Go map, and Go renders maps in key order; the Rust renderer used to leak
@@ -73,6 +81,13 @@ These are deliberate; each is documented at the code that causes it.
 
 ### Fixed
 
+- `ci-go-env` no longer flags this repository's own test sample: the sample
+  oauth2 URL is assembled from parts, so the repository-wide credential scan
+  stays quiet about itself.
+- The `rust-panic` and `rust-unsafe` scanners now treat any `tests/` directory
+  as test code, not only the crate-level one, so a module can keep its test
+  helpers next to itself.
+- `bump-version --dry-run`
 - `bump-version --dry-run` and `release-start --dry-run` no longer write
   anything; the dry-run check happens before any filesystem or git change.
 - Global flags are now accepted after positional arguments, so
