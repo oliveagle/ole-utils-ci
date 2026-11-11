@@ -97,7 +97,13 @@ pub fn dispatch(command: &str, args: &[String]) -> Result<i32, String> {
         "verify-dist" => with_config(commands::dist::verify_dist, &mut cfg, args),
         "bump-version" => bump_command(&mut cfg, args, false),
         "release-start" => bump_command(&mut cfg, args, true),
-        other => Err(format!("unknown command: {other}")),
+        // Go prints the complaint and the usage block on stdout and exits 1,
+        // rather than routing it through the `Error:` prefix on stderr.
+        other => {
+            println!("Unknown command: {other}\n");
+            print_usage();
+            Ok(1)
+        }
     }
 }
 

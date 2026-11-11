@@ -8,7 +8,14 @@
     "paths": [
       "target/**",
       "vendor/**"
-    ]
+    ],
+    // The usage text is a verbatim copy of the Go original's help block, and
+    // that block names the very markers this gate scans for. Only the file
+    // holding the command list is exempt; the rest of the sources are still
+    // scanned line by line.
+    "bugs": {
+      "paths": ["src/usage/commands.rs"]
+    }
   },
   "file-length": {
     "profiles": {
