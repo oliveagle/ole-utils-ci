@@ -15,17 +15,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `rust-build`, `rust-doc`, `rust-audit`, `rust-manifest`, `rust-unsafe`,
   `rust-panic` and `rust-msrv`. The Rust gates are driven by `blaze` when it is
   installed, falling back to `cargo` otherwise.
+- Quality gates: `bugs`, `sanity`, `license`, `structure`, `file-length`,
+  `complexity`, `package-size`, `artifact-size`, `go-pin`, `goversion`,
+  `no-shell-exec` and `plugin-freshness`.
+- Go toolchain commands: `install`, `lint`, `test`, `build`, `coverage`,
+  `branch-coverage`, `gomut`, `tengo-test`, `tengo-coverage`, `tengo-mutate`,
+  `test-report` and `all`.
 - Version and release commands: `version-check`, `bump-version`,
-  `release-check`, `release-start` and `release-finish`.
-- Repository commands: `doctor`, `repo-status`, `cleanup` (with `--dry-run`),
-  `report-bundle` and `verify-dist`.
-- Extra checks: `ci-lint` / `glab-ci-lint`, `arch`, `buf-lint` and `web-lint`.
+  `release-check`, `release`, `release-start`, `release-finish`, `release-model`
+  and `protect-set`.
+- Repository commands: `doctor`, `repo-status`, `git-author`, `cleanup` (with
+  `--dry-run`), `report-bundle` and `verify-dist`.
+- Extra checks: `ci-lint` / `glab-ci-lint`, `ci-go-env`, `arch`, `buf-lint`,
+  `buf-breaking`, `buf-generate`, `web-lint`, `fake-metadata-server` and
+  `kms-stub`.
+- GitLab commands: `pipeline-run`, `logs` and `captain-ci-test`, each verified
+  against the Go binary on stdout, stderr, exit code and — for the two that
+  post a body — the exact request bytes.
+- Downstream tooling: `ci-recipe` (with its `list` / `url` / `script` /
+  `download` subcommands) and `upgrade`.
 - Integration tests in `tests/cli.rs` that drive the compiled binary and pin
   the exit-code, text and JSON contracts.
 - `blaze` build support through `scripts/blaze.sh`, which works around the
   user-namespace restrictions of sandboxed containers.
 - The repository dogfoods the tool: every gate runs against this repository in
   `make gate`.
+
+### Changed
+
+- `--output toon` now sorts every object's keys, recursively. Go's TOON path
+  round-trips the payload through `encoding/json`, which turns each object into
+  a Go map, and Go renders maps in key order; the Rust renderer used to leak
+  struct declaration order instead. JSON output is unchanged: it keeps
+  declaration order, the way `json.Marshal` does for a struct.
+
+### Not yet ported
+
+- `pipeline-watch` (the interactive TUI dashboard) and `workflow` (the named
+  release/test workflow driver) remain Go-only.
+
+### Known divergences
+
+These are deliberate; each is documented at the code that causes it.
+
+- `bugs` scans `.go` and `.rs`; the Go original only scans `.go`.
+- `repo-status` reports the local git state rather than the live GitLab
+  pipeline.
+- `captain-ci-test` writes `cover.zip` with stored entries instead of
+  deflate, because a compressor is a dependency this crate cannot audit. The
+  archive is valid and unzips to the same bytes.
+- Error text produced by a third-party library — a `serde_json` / `serde_yaml`
+  decode failure, a `curl` transport failure — is worded differently from the
+  Go original's.
+- `pipeline-run --var` keeps command-line order; Go iterates a map, so a list
+  of variables is ordered arbitrarily.
+- `doctor`, `bump-version` and `release-start` print a different summary.
 
 ### Fixed
 

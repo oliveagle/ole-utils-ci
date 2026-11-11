@@ -89,6 +89,11 @@ devine-utils-ci all --output toon
 | `test` | `go test` with the race detector. |
 | `build` | `go build ./...`. |
 | `coverage` | Line coverage against the threshold. |
+| `branch-coverage` | Branch coverage (gobco). |
+| `gomut` | Go mutation testing (the embedded gomut engine). |
+| `tengo-test` | Tengo tool unit tests with fake `call_tool` mocks. |
+| `tengo-coverage` | Tengo line + branch coverage gates. |
+| `tengo-mutate` | Tengo source mutation testing. |
 | `test-report` | JUnit XML report. |
 | `all` | The whole quality gate, in CI order. |
 
@@ -99,8 +104,11 @@ devine-utils-ci all --output toon
 | `version-check` | `VERSION`, `Cargo.toml` and the git tag must agree. |
 | `bump-version` | Bump the version: `patch` \| `minor` \| `major` \| `rc` \| `promote`. |
 | `release-check` | The gate that runs before a release is cut. |
+| `release` | Create the GitLab release for the current tag. |
 | `release-start` | Create the release branch and the bump commit. |
 | `release-finish` | Tag the merged release and push the tag. |
+| `release-model` | Explain the simple and strict release models. |
+| `protect-set` | Set branch and tag protections for a project. |
 
 ### Repository
 
@@ -108,6 +116,7 @@ devine-utils-ci all --output toon
 |---------|--------------|
 | `doctor` | Report the toolchain and the project layout. |
 | `repo-status` | Branch, head, dirty paths and recent commits. |
+| `git-author` | Enforce the per-repo commit identity policy. |
 | `cleanup` | Remove the build artifacts (`--dry-run` only shows them). |
 | `report-bundle` | Collect the reports of a CI run into one directory. |
 | `verify-dist` | Check the release artifacts against `SHA256SUMS`. |
@@ -117,9 +126,35 @@ devine-utils-ci all --output toon
 | Command | What it does |
 |---------|--------------|
 | `ci-lint`, `glab-ci-lint` | Validate the GitLab CI pipeline file; skips when there is none. |
+| `ci-go-env` | Check Go env and proxy config in the build scripts. |
 | `arch` | Dependency cycles and layer direction. |
 | `buf-lint` | The proto naming conventions. |
+| `buf-breaking` | Check the protos for breaking changes. |
+| `buf-generate` | Generate code from the proto files. |
 | `web-lint` | Syntax sanity for the front-end sources. |
+| `fake-metadata-server` | Stub the Ctrip metadata endpoint for tests. |
+| `kms-stub` | Serve a DEV ONLY local Ctrip KMS stand-in. |
+
+### GitLab
+
+| Command | What it does |
+|---------|--------------|
+| `pipeline-run` | Trigger a GitLab pipeline for a project (needs `GITLAB_TOKEN`). |
+| `logs` | Query or tail Clog logs (needs `OSG_CLOG_TOKEN`). |
+| `captain-ci-test` | Reproduce the Captain-CI Test job artifacts. |
+
+### Downstream tooling
+
+| Command | What it does |
+|---------|--------------|
+| `ci-recipe` | Render or download the downstream CI artifact recipe. |
+| `upgrade` | Download and install a specific version from GitLab releases. |
+
+### Not yet ported
+
+`pipeline-watch` (the interactive TUI dashboard) and `workflow` (the named
+release/test workflow driver) are still Go-only. Everything else in the Go
+command surface is implemented here.
 
 Every command accepts `--output json` or `--output toon` where it reports
 findings, and every command exits `0` on success, `1` on a failed check or an
