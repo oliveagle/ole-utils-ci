@@ -26,6 +26,7 @@ pub mod gomut;
 pub mod kms_stub;
 pub mod kms_stub_cmd;
 pub mod kms_stub_http;
+pub mod logs;
 pub mod pipeline_run;
 pub mod protect_set;
 pub mod proto;

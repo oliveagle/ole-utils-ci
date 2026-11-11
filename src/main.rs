@@ -165,6 +165,9 @@ fn dispatch(command: &str, args: &[String]) -> Result<i32, String> {
         // Go hands `pipeline-run` its raw args: the command owns a private
         // flag set the shared parser must not see.
         "pipeline-run" => commands::pipeline_run::pipeline_run(args),
+        // Go hands `logs` its raw args: the command owns a private flag set
+        // the shared parser must not see.
+        "logs" => commands::logs::logs(args),
         "report-bundle" => with_config(commands::reports::report_bundle, &mut cfg, args),
         "verify-dist" => with_config(commands::dist::verify_dist, &mut cfg, args),
         "bump-version" => bump_command(&mut cfg, args, false),
@@ -297,12 +300,16 @@ Version and release:
   version-check        VERSION, Cargo.toml and the git tag must agree.
   bump-version         Bump the version: patch|minor|major|rc|promote.
   release-check        The gate that runs before a release.
+  release              Create the GitLab release for the current tag.
   release-start        Create the release branch and the bump commit.
   release-finish       Tag the merged release and push the tag.
+  release-model        Explain the simple and strict release models.
+  protect-set          Set branch and tag protections for a project.
 
 Repository:
   doctor               Report the toolchain and the project layout.
   repo-status          Branch, head, dirty paths and recent commits.
+  git-author           Enforce the per-repo commit identity policy.
   cleanup              Remove the build artifacts.
   report-bundle        Collect the reports of a CI run into one directory.
   verify-dist          Check the release artifacts against SHA256SUMS.
@@ -310,14 +317,25 @@ Repository:
 More checks:
   ci-lint              Validate the GitLab CI pipeline file.
   glab-ci-lint         Alias of ci-lint.
+  ci-go-env            Check Go env and proxy config in the build scripts.
   arch                 Dependency cycles and layer direction.
   buf-lint             The proto naming conventions.
+  buf-breaking         Check the protos for breaking changes.
+  buf-generate         Generate code from the proto files.
   web-lint             Syntax sanity for the front-end sources.
   fake-metadata-server Stub the Ctrip metadata endpoint for tests.
   kms-stub             Serve a DEV ONLY local Ctrip KMS stand-in.
 
-GitLab pipelines:
+GitLab:
   pipeline-run         Trigger a GitLab pipeline for a project (needs GITLAB_TOKEN).
+  pipeline-watch       TUI dashboard of pipelines, MRs and commits.
+  workflow             Codify the release and test flow for a named workflow.
+  logs                 Query or tail Clog logs (needs OSG_CLOG_TOKEN).
+  captain-ci-test      Reproduce the Captain-CI Test job artifacts.
+
+Downstream tooling:
+  ci-recipe            Render or download the downstream CI artifact recipe.
+  upgrade              Download and install a specific version from GitLab releases.
 
 Global flags:
   --project-root <path>       Repository to check (default: .).
