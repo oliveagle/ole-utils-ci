@@ -90,7 +90,7 @@ devine-utils-ci all --output toon
 | `build` | `go build ./...`. |
 | `coverage` | Line coverage against the threshold. |
 | `branch-coverage` | Branch coverage (gobco). |
-| `gomut` | Go mutation testing (the embedded gomut engine). |
+| `gomut` | Go mutation testing through the installed `gomut` engine. |
 | `tengo-test` | Tengo tool unit tests with fake `call_tool` mocks. |
 | `tengo-coverage` | Tengo line + branch coverage gates. |
 | `tengo-mutate` | Tengo source mutation testing. |
@@ -115,9 +115,8 @@ devine-utils-ci all --output toon
 | Command | What it does |
 |---------|--------------|
 | `doctor` | Report the toolchain and the project layout. |
-| `repo-status` | Branch, head, dirty paths and recent commits. |
 | `git-author` | Enforce the per-repo commit identity policy. |
-| `cleanup` | Remove the build artifacts (`--dry-run` only shows them). |
+| `cleanup` | Stop the background helpers (`fake-metadata-server`) and release their ports. Call it from `after_script` or a `trap`. |
 | `report-bundle` | Collect the reports of a CI run into one directory. |
 | `verify-dist` | Check the release artifacts against `SHA256SUMS`. |
 
@@ -140,9 +139,20 @@ devine-utils-ci all --output toon
 | Command | What it does |
 |---------|--------------|
 | `pipeline-run` | Trigger a GitLab pipeline for a project (needs `GITLAB_TOKEN`). |
+| `repo-status` | Live pipeline status of one project, for AI agents (no cache; default `-o toon`). |
 | `pipeline-watch` | The per-repo CI dashboard: one row per watched project. |
 | `logs` | Query or tail Clog logs (needs `OSG_CLOG_TOKEN`). |
 | `captain-ci-test` | Reproduce the Captain-CI Test job artifacts. |
+
+`repo-status` answers "is my last push green?" for one project without going
+through the dashboard: it reads the same config file as `pipeline-watch`,
+queries GitLab live (no cache) and prints one object — project, head pipeline,
+recent pipelines, open MRs with their head-pipeline status, commits in the last
+day and the latest release tag. It takes `-config`, `-base-url`, `-pipelines`,
+`-pipeline`, `--jobs`, `--trace`, `--mrs`, `--list-repos`, `-timeout` and
+`--output toon|json|text`. TOON is the default because the command exists for
+AI agents; `--pretty` is the pre-TOON alias for JSON, and `--list-repos` prints
+the configured projects and exits without touching the network.
 
 `pipeline-watch` reads the same YAML the Go tool reads — `base_url`, `token`,
 `refresh.interval_seconds`, `per_repo`, `local_root` and a `repos` list of

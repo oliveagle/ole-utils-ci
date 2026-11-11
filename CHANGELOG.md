@@ -24,14 +24,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Version and release commands: `version-check`, `bump-version`,
   `release-check`, `release`, `release-start`, `release-finish`, `release-model`
   and `protect-set`.
-- Repository commands: `doctor`, `repo-status`, `git-author`, `cleanup` (with
-  `--dry-run`), `report-bundle` and `verify-dist`.
+- Repository commands: `doctor`, `git-author`, `cleanup` (stop the
+  `fake-metadata-server` helpers and release port 18080), `report-bundle` and
+  `verify-dist`.
 - Extra checks: `ci-lint` / `glab-ci-lint`, `ci-go-env`, `arch`, `buf-lint`,
   `buf-breaking`, `buf-generate`, `web-lint`, `fake-metadata-server` and
   `kms-stub`.
-- GitLab commands: `pipeline-run`, `logs` and `captain-ci-test`, each verified
-  against the Go binary on stdout, stderr, exit code and — for the two that
-  post a body — the exact request bytes.
+- GitLab commands: `pipeline-run`, `repo-status`, `logs` and `captain-ci-test`,
+  each verified against the Go binary on stdout, stderr, exit code and — for
+  the two that post a body — the exact request bytes.
 - `pipeline-watch`, the per-repo CI dashboard. It reads the same YAML the Go
   tool reads, honours `--config`, `--base-url`, `--interval`, `--per-repo` and
   `--json`, and paints the same table with the same key bindings. The row
@@ -81,8 +82,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 These are deliberate; each is documented at the code that causes it.
 
 - `bugs` scans `.go` and `.rs`; the Go original only scans `.go`.
-- `repo-status` reports the local git state rather than the live GitLab
-  pipeline.
 - `captain-ci-test` writes `cover.zip` with stored entries instead of
   deflate, because a compressor is a dependency this crate cannot audit. The
   archive is valid and unzips to the same bytes.
@@ -91,23 +90,33 @@ These are deliberate; each is documented at the code that causes it.
   Go original's.
 - `pipeline-run --var` keeps command-line order; Go iterates a map, so a list
   of variables is ordered arbitrarily.
+- `gomut` prints the installed engine's usage banner, version and flag set.
+  The Go original embeds `gomut/cli`, so it always reports the copy compiled
+  into it; the wrapper here delegates to `gomut` on `PATH`, which may be a
+  different release. Everything else — the `--project-root` lift, the exit
+  codes and the pass-through of every other argument — is the Go behaviour.
 - `doctor`, `bump-version` and `release-start` print a different summary.
 
 ### Fixed
 
+- `repo-status` is the Go command again: a live GitLab query for one project
+  (project, head pipeline, recent pipelines, jobs, traces, open MRs, commits
+  in the last day, latest tag), not a local `git status`. The usage block,
+  the flag heuristic, the clamping, the request URLs and the key order are
+  the Go ones, and TOON is the default output.
+- `cleanup` kills the background helpers again — the PID files, port 18080 and
+  a `pkill` sweep — and prints the same three `  · killed …` lines. It no
+  longer deletes build artifacts, which the Go command never did.
 - `ci-go-env` no longer flags this repository's own test sample: the sample
   oauth2 URL is assembled from parts, so the repository-wide credential scan
   stays quiet about itself.
 - The `rust-panic` and `rust-unsafe` scanners now treat any `tests/` directory
   as test code, not only the crate-level one, so a module can keep its test
   helpers next to itself.
-- `bump-version --dry-run`
 - `bump-version --dry-run` and `release-start --dry-run` no longer write
   anything; the dry-run check happens before any filesystem or git change.
 - Global flags are now accepted after positional arguments, so
   `bump-version patch --dry-run` no longer ignores the flag.
-- `repo-status` reported the wrong removal count in `cleanup`, and `cleanup`
-  now honours `--dry-run` in what it prints.
 - `ci-lint`, `go-pin`, `goversion`, `buf-lint` and `verify-dist` skip cleanly
   when the input they need is absent instead of failing the run.
 - The `report-bundle` manifest ends with a newline, and generated `reports/`

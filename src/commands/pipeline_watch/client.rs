@@ -26,10 +26,13 @@ const MAX_GROUP_ITEMS: usize = 200;
 mod branch;
 mod model;
 mod mr;
+mod open_mrs;
 mod projects;
 mod tags;
+mod trace;
 
 pub use model::*;
+pub(crate) use open_mrs::*;
 
 /// A thin REST client for one GitLab instance.
 #[derive(Debug, Clone)]

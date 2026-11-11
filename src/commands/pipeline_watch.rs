@@ -16,7 +16,7 @@
 //!     works.
 
 mod cache;
-mod client;
+pub(crate) mod client;
 mod fetch;
 mod flags;
 mod keys;

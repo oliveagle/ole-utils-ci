@@ -154,9 +154,8 @@ Version and release:
 
 Repository:
   doctor               Report the toolchain and the project layout.
-  repo-status          Branch, head, dirty paths and recent commits.
   git-author           Enforce the per-repo commit identity policy.
-  cleanup              Remove the build artifacts.
+  cleanup              Stop the background helpers and release their ports.
   report-bundle        Collect the reports of a CI run into one directory.
   verify-dist          Check the release artifacts against SHA256SUMS.
 
@@ -175,6 +174,7 @@ More checks:
 GitLab:
   pipeline-run         Trigger a GitLab pipeline for a project (needs GITLAB_TOKEN).
   pipeline-watch       TUI dashboard of pipelines, MRs and commits.
+  repo-status          Live pipeline status of one project (no cache; default TOON).
   workflow             Codify the release and test flow for a named workflow.
   logs                 Query or tail Clog logs (needs OSG_CLOG_TOKEN).
   captain-ci-test      Reproduce the Captain-CI Test job artifacts.

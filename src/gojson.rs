@@ -97,3 +97,57 @@ where
         .map_err(serde::ser::Error::custom)?;
     serde::Serialize::serialize(raw.as_ref(), serializer)
 }
+
+/// Formats a timestamp the way Go's `encoding/json` writes a `time.Time`.
+///
+/// Go uses RFC3339 with the fractional part trimmed of trailing zeros, so
+/// `.123000000` comes out as `.123` and a whole second loses the dot
+/// entirely. `chrono`'s own serializer pins the fraction at three, six or
+/// nine digits and appends `+00:00` instead of `Z`, so it cannot be used.
+pub fn rfc3339_nano(stamp: &chrono::DateTime<chrono::Utc>) -> String {
+    let head = stamp.format("%Y-%m-%dT%H:%M:%S").to_string();
+    let nanos = stamp.timestamp_subsec_nanos();
+    if nanos == 0 {
+        return format!("{head}Z");
+    }
+    let mut fraction = format!("{nanos:09}");
+    while fraction.ends_with('0') {
+        fraction.pop();
+    }
+    format!("{head}.{fraction}Z")
+}
+
+/// What Go prints for an unset `time.Time`.
+pub const ZERO_TIME: &str = "0001-01-01T00:00:00Z";
+
+/// Serializes a `time.Time`.
+///
+/// Go's `omitempty` does not drop a struct value, so a zero stamp is still
+/// written out. Callers that hold an optional stamp therefore serialize
+/// [`ZERO_TIME`] rather than skipping the field.
+pub fn serialize_stamp<S>(
+    stamp: &Option<chrono::DateTime<chrono::Utc>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match stamp {
+        Some(value) => serializer.serialize_str(&rfc3339_nano(value)),
+        None => serializer.serialize_str(ZERO_TIME),
+    }
+}
+
+/// Serializes a `*time.Time`: absent when nil, RFC3339Nano otherwise.
+pub fn serialize_stamp_opt<S>(
+    stamp: &Option<chrono::DateTime<chrono::Utc>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match stamp {
+        Some(value) => serializer.serialize_str(&rfc3339_nano(value)),
+        None => serializer.serialize_none(),
+    }
+}

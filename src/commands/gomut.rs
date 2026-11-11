@@ -4,12 +4,13 @@
 
 //! `gomut` — Go mutation testing through the installed gomut engine.
 //!
-//! The Go original embeds `gomut/cli`, so its usage banner and `-version`
-//! line describe the embedded copy. This rewrite delegates to the `gomut`
-//! binary on `PATH` instead: every flag, mode and exit code comes from that
-//! binary, which keeps the wrapper from drifting from upstream. The only
-//! divergence is the banner, which then reports the installed engine's
-//! version rather than an embedded one.
+//! The Go original embeds `gomut/cli`, so its usage banner, its flag list
+//! and its `-version` line describe the copy compiled into the binary. This
+//! rewrite delegates to the `gomut` on `PATH` instead: every flag, mode and
+//! exit code comes from that binary, which keeps the wrapper from drifting
+//! from upstream. The cost is that the usage text and the version line
+//! describe the installed engine, which may be a different release from the
+//! one the Go tool embeds.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

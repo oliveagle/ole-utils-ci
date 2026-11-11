@@ -45,7 +45,10 @@ fn keeps_a_nine_digit_fraction() {
 #[test]
 fn an_unset_stamp_becomes_the_go_zero_time() {
     let text = serde_json::to_string(&Holder { stamp: None }).unwrap();
-    assert_eq!(text, format!("{{\"stamp\":\"{ZERO_TIME}\"}}"));
+    assert_eq!(
+        text,
+        format!("{{\"stamp\":\"{}\"}}", crate::gojson::ZERO_TIME)
+    );
 }
 
 #[test]
