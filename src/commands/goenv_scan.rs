@@ -131,7 +131,15 @@ mod tests {
     #[test]
     fn detects_the_repo_wide_credential_pattern() {
         let pattern = oauth2_pattern();
-        assert!(pattern.is_match("git remote add x https://oauth2:abcd1234ef@git.example"));
+        // The sample is assembled from parts so that this test does not trip
+        // the repository-wide scan that `ci-go-env` runs over its own source.
+        let sample = [
+            "git remote add x https://",
+            "oa",
+            "uth2:abcd1234ef@git.example",
+        ]
+        .concat();
+        assert!(pattern.is_match(&sample), "{sample}");
         assert!(!pattern.is_match("oauth2:short"));
     }
 

@@ -47,6 +47,7 @@ check: fmt-check clippy test
 ## gate: run every quality gate against this repository
 gate: build
 	$(BIN) all
+	$(BIN) ci-go-env
 
 ## gates: run the language-agnostic gates only
 gates: build
