@@ -96,9 +96,8 @@ These are deliberate; each is documented at the code that causes it.
   into it; the wrapper here delegates to `gomut` on `PATH`, which may be a
   different release. Everything else — the `--project-root` lift, the exit
   codes and the pass-through of every other argument — is the Go behaviour.
-- `doctor` and `version-check` print a different report — in text mode and
-  under `--output` alike — and `release-check` names its first failure where
-  Go prints the whole dirty-file list.
+- `release-check` names its first failure where Go prints the whole
+  dirty-file list.
 - `bump-version` and `release-start` print a different summary.
 - `buf-breaking --against <ref>` is accepted here because Go's own `--help`
   advertises it; Go's flag parser rejects the flag as undefined.

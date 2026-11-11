@@ -67,14 +67,8 @@ impl Report {
     /// structured modes expose identical keys.
     pub fn render_toon(&self) -> String {
         let value = serde_json::to_value(self).unwrap_or(serde_json::Value::Null);
-        match toon_format::encode_default(&sort_object_keys(value)) {
-            Ok(text) => {
-                if text.ends_with('\n') {
-                    text
-                } else {
-                    format!("{text}\n")
-                }
-            }
+        match toon(&value) {
+            Ok(text) => with_newline(text),
             Err(e) => format!("# toon encode failed: {e}\n"),
         }
     }
@@ -91,8 +85,7 @@ pub fn encode_value(mode: &str, pretty: bool, value: &serde_json::Value) -> Resu
     let selected = if pretty { "json" } else { mode };
     match selected.trim().to_ascii_lowercase().as_str() {
         "" | "toon" => {
-            let text = toon_format::encode_default(&sort_object_keys(value.clone()))
-                .map_err(|e| format!("toon encode failed: {e}"))?;
+            let text = toon(value).map_err(|e| format!("toon encode failed: {e}"))?;
             Ok(with_newline(text))
         }
         "json" => {
@@ -110,6 +103,31 @@ pub fn encode_value(mode: &str, pretty: bool, value: &serde_json::Value) -> Resu
             "unknown --output {mode:?}; use toon, json, or text"
         )),
     }
+}
+
+/// Encodes `value` as TOON with the Go original's object-key order and its
+/// spelling of an empty array.
+fn toon(value: &serde_json::Value) -> Result<String, String> {
+    let text = toon_format::encode_default(&sort_object_keys(value.clone()))
+        .map_err(|error| error.to_string())?;
+    Ok(empty_arrays_like_go(&text))
+}
+
+/// Rewrites `key: []` to `key[0]:`, the way `toon-go` spells it.
+///
+/// `toon-go` renders an empty array as a tabular header with zero rows —
+/// `key[0]:` — while this crate's `toon-format` follows the newer spec and
+/// writes `key: []`. The two can never be confused with a string: both
+/// encoders quote any string containing a bracket, so a line ending in an
+/// unquoted `: []` is always an empty array.
+fn empty_arrays_like_go(text: &str) -> String {
+    text.lines()
+        .map(|line| match line.strip_suffix(": []") {
+            Some(prefix) => format!("{prefix}[0]:"),
+            None => line.to_string(),
+        })
+        .collect::<Vec<String>>()
+        .join("\n")
 }
 
 /// Puts every JSON object's keys into lexicographic order, recursively.
@@ -161,6 +179,17 @@ mod encode_tests {
         assert!(text.contains("b: 2"), "{text}");
         assert!(text.contains("a: 1"), "{text}");
         assert!(text.ends_with('\n'));
+    }
+
+    #[test]
+    fn an_empty_array_is_spelled_the_way_toon_go_spells_it() {
+        let value = serde_json::json!({"items": [], "n": 1});
+        let text = encode_value("", false, &value).unwrap();
+        assert_eq!(text, "items[0]:\nn: 1\n");
+        // A string that reads `[]` is quoted, so it is never rewritten.
+        let value = serde_json::json!({"items": "[]"});
+        let text = encode_value("", false, &value).unwrap();
+        assert_eq!(text, "items: \"[]\"\n");
     }
 
     #[test]

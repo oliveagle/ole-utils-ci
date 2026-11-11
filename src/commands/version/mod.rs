@@ -10,7 +10,10 @@
 
 pub mod bump;
 pub mod cargo;
+pub mod check;
 pub mod release;
+
+pub use check::version_check;
 
 use crate::config::Config;
 use crate::git;
@@ -69,42 +72,6 @@ pub fn gather(cfg: &Config) -> Result<VersionState, String> {
         expected_tag,
         tag_exists,
     })
-}
-
-/// The `version-check` command: the three version sources must agree.
-pub fn version_check(cfg: &Config) -> Result<i32, String> {
-    let state = gather(cfg)?;
-    let mut report = Report::new("version-check");
-    report.extra = Some(serde_json::json!({
-        "version": state.version.to_string(),
-        "cargo_version": state.cargo_version,
-        "branch": state.branch,
-        "head": state.head,
-        "expected_tag": state.expected_tag,
-        "tag_exists": state.tag_exists,
-        "is_rc": state.version.is_rc,
-    }));
-    if let Some(cargo_version) = &state.cargo_version {
-        if cargo_version != &state.version.to_string() {
-            report.add(Diagnostic::error(
-                "Cargo.toml",
-                "version/mirror-mismatch",
-                format!(
-                    "Cargo.toml declares {cargo_version} but VERSION says {}",
-                    state.version
-                ),
-            ));
-        }
-    }
-    if report.ok {
-        report.summary = format!("version-check: {} is consistent", state.version);
-        print!("{}", report.render_text());
-        Ok(0)
-    } else {
-        report.summary = format!("version-check: {} is inconsistent", state.version);
-        print!("{}", report.render_text());
-        Err(report.summary)
-    }
 }
 
 /// The `release-check` command: the pre-release gate.

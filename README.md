@@ -101,7 +101,7 @@ devine-utils-ci all --output toon
 
 | Command | What it does |
 |---------|--------------|
-| `version-check` | `VERSION`, `Cargo.toml` and the git tag must agree. |
+| `version-check` | `VERSION`, every declared version mirror and the git tag must agree. |
 | `bump-version` | Bump the version: `patch` \| `minor` \| `major` \| `rc` \| `promote`. |
 | `release-check` | The gate that runs before a release is cut. |
 | `release` | Create the GitLab release for the current tag. |
@@ -114,7 +114,7 @@ devine-utils-ci all --output toon
 
 | Command | What it does |
 |---------|--------------|
-| `doctor` | Report the toolchain and the project layout. |
+| `doctor` | Run diagnostic checks on the toolchain, the environment and the project layout. |
 | `git-author` | Enforce the per-repo commit identity policy. |
 | `cleanup` | Stop the background helpers (`fake-metadata-server`) and release their ports. Call it from `after_script` or a `trap`. |
 | `report-bundle` | Collect the reports of a CI run into one directory. |

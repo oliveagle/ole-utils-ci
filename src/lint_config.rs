@@ -23,6 +23,23 @@ pub struct ProjectConfig {
     /// The `lint:` block.
     #[serde(default)]
     pub lint: LintConfig,
+    /// Files that must carry the same content as the root `VERSION`.
+    #[serde(default)]
+    pub version_mirrors: Vec<String>,
+    /// Directory trees that must stay byte-identical to their source.
+    #[serde(default)]
+    pub tree_mirrors: Vec<TreeMirror>,
+}
+
+/// One `tree_mirrors` entry: one source tree and its mirrors.
+#[derive(Debug, Default, Deserialize)]
+pub struct TreeMirror {
+    /// The source directory, relative to the project root.
+    #[serde(default)]
+    pub src: String,
+    /// The destination directories, relative to the project root.
+    #[serde(default)]
+    pub dsts: Vec<String>,
 }
 
 /// The `lint:` block.
