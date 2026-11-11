@@ -124,7 +124,7 @@ devine-utils-ci all --output toon
 
 | Command | What it does |
 |---------|--------------|
-| `ci-lint`, `glab-ci-lint` | Validate the GitLab CI pipeline file; skips when there is none. |
+| `ci-lint`, `glab-ci-lint` | Validate the GitLab CI pipeline file; errors when there is none, the way Go does. |
 | `ci-go-env` | Check Go env and proxy config in the build scripts. |
 | `arch` | Dependency cycles and layer direction. |
 | `buf-lint` | The proto naming conventions. |
@@ -192,6 +192,9 @@ The four focused lint gates also default `--output` to `toon` rather than
 `text`, the way Go's `focusedOutputMode` does, because they exist to be read
 by an agent. `web-lint -h` prints the `flag` package's block on stderr and
 the hand-written one on stdout, precisely as the Go command does.
+`buf-breaking` lifts `--against` out before the shared parser sees it, so the
+baseline Go's own `--help` advertises is accepted here even though Go's flag
+set rejects it as undefined.
 
 Everything else — the row layout, the colours, the column widths, the key
 bindings, the cache TTLs, the JSON snapshot and the error wording — is

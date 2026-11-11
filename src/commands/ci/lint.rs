@@ -4,86 +4,23 @@
 
 //! The `ci-lint` command: validate the GitLab CI pipeline file.
 //!
-//! The file has to parse as YAML, and three text-level mistakes that GitLab
-//! rejects are reported as well: a tab character, trailing whitespace and an
-//! unquoted colon inside a list item.
+//! The file has to parse as YAML. Three text-level mistakes GitLab rejects are
+//! reported — a tab character, trailing whitespace and an unquoted colon
+//! inside a list item — and then every top-level job is checked for the shape
+//! GitLab needs: a job with no `script:`, `trigger:` or `extends:`, a script
+//! whose entries are not strings, and a `>` folded block scalar in a script
+//! section.
 
 use std::path::Path;
+
+use serde_yaml::Value;
 
 use crate::config::Config;
 use crate::output::{Diagnostic, Report};
 
-/// One problem found in the pipeline file.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CiLintIssue {
-    /// 1-based line number.
-    pub line: usize,
-    /// The rule that was broken.
-    pub rule: String,
-    /// A one-line description.
-    pub message: String,
-}
+mod scan;
 
-/// Scans the pipeline file for the text-level mistakes GitLab rejects.
-pub fn scan_text(text: &str) -> Vec<CiLintIssue> {
-    let mut issues = Vec::new();
-    for (index, line) in text.lines().enumerate() {
-        let number = index + 1;
-        if line.contains('\t') {
-            issues.push(CiLintIssue {
-                line: number,
-                rule: "tab-char".to_string(),
-                message: "tab character detected (use spaces)".to_string(),
-            });
-        }
-        if line.ends_with(' ') {
-            issues.push(CiLintIssue {
-                line: number,
-                rule: "trailing-whitespace".to_string(),
-                message: "trailing whitespace".to_string(),
-            });
-        }
-        if let Some(content) = list_item_content(line) {
-            if let Some(issue) = unquoted_colon(content) {
-                issues.push(CiLintIssue {
-                    line: number,
-                    rule: "unquoted-colon".to_string(),
-                    message: issue,
-                });
-            }
-        }
-    }
-    issues
-}
-
-/// The text of a YAML list item, when the line holds one.
-fn list_item_content(line: &str) -> Option<&str> {
-    let trimmed = line.trim_start();
-    trimmed.strip_prefix("- ")
-}
-
-/// Checks a list item for an unquoted colon in a scalar value.
-fn unquoted_colon(content: &str) -> Option<String> {
-    if content.contains('"') || content.contains('\'') {
-        return None;
-    }
-    let (key, _) = content.split_once(": ")?;
-    if is_simple_key(key) {
-        return None;
-    }
-    Some(format!(
-        "unquoted colon in string: {:?} (wrap in quotes)",
-        content
-    ))
-}
-
-/// Whether a key looks like a plain mapping key rather than a scalar.
-fn is_simple_key(key: &str) -> bool {
-    !key.is_empty()
-        && key
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.' || c == '/')
-}
+pub use scan::{scan_folded, scan_jobs, scan_text, CiLintIssue};
 
 /// The `ci-lint` command.
 pub fn ci_lint(cfg: &Config) -> Result<i32, String> {
@@ -95,61 +32,68 @@ pub fn ci_lint_file(cfg: &Config, relative: &Path) -> Result<i32, String> {
     let path = cfg.root().join(relative);
     let display = relative.display().to_string();
     let Ok(raw) = std::fs::read_to_string(&path) else {
-        let mut report = Report::new("ci-lint");
-        report.summary = format!("ci-lint: no {display}, skipped");
-        print!("{}", report.render_text());
-        return Ok(0);
+        return Err(format!("{display} not found in {}", cfg.root().display()));
     };
     let mut report = Report::new("ci-lint");
-    match serde_yaml::from_str::<serde_yaml::Value>(&raw) {
-        Ok(_) => {}
-        Err(e) => {
+    let parsed = match serde_yaml::from_str::<Value>(&raw) {
+        Ok(parsed) => parsed,
+        Err(error) => {
             report.add(Diagnostic::error(
                 display.clone(),
                 "yaml-syntax",
-                e.to_string(),
+                error.to_string(),
             ));
             report.summary = "ci-lint: YAML syntax error".to_string();
-            print!("{}", report.render_text());
+            if cfg.output.is_empty() {
+                return Err("YAML syntax error".to_string());
+            }
+            print!("{}", report.render(crate::output::parse_mode(&cfg.output)));
             return Err(report.summary);
         }
-    }
-    let issues = scan_text(&raw);
+    };
+    let mut issues = scan_text(&raw);
+    issues.extend(scan_jobs(&parsed));
+    issues.extend(scan_folded(&raw));
     for issue in &issues {
         report.add(
             Diagnostic::error(display.clone(), issue.rule.clone(), issue.message.clone())
                 .at_line(issue.line),
         );
     }
-    report.extra = Some(serde_json::json!({ "issues": issues.len() }));
+    if cfg.output.is_empty() {
+        println!("🔍 Validating CI configuration...");
+        if issues.is_empty() {
+            println!("✅ CI configuration is valid");
+            return Ok(0);
+        }
+        let lines: Vec<String> = issues
+            .iter()
+            .map(|issue| {
+                if issue.line > 0 {
+                    format!("  Line {}: {}", issue.line, issue.message)
+                } else {
+                    format!("  {}", issue.message)
+                }
+            })
+            .collect();
+        return Err(format!(
+            "CI lint found {} issue(s):\n{}",
+            issues.len(),
+            lines.join("\n")
+        ));
+    }
+    if issues.is_empty() {
+        report.summary = "ci-lint: .gitlab-ci.yml passes local static checks".to_string();
+    } else {
+        report.summary = format!("ci-lint: {} issue(s) in .gitlab-ci.yml", issues.len());
+    }
+    print!("{}", report.render(crate::output::parse_mode(&cfg.output)));
     if report.ok {
-        report.summary = "ci-lint: the pipeline file is clean".to_string();
-        print!("{}", report.render_text());
         Ok(0)
     } else {
-        report.summary = format!("ci-lint: {} issue(s) found", issues.len());
-        print!("{}", report.render_text());
-        Err(report.summary)
+        Err(format!("{} CI lint issue(s)", issues.len()))
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn reports_tabs_and_trailing_whitespace() {
-        let issues = scan_text("job:\n\tscript: echo hi\n");
-        assert!(issues.iter().any(|i| i.rule == "tab-char"));
-        let issues = scan_text("job:  \n");
-        assert!(issues.iter().any(|i| i.rule == "trailing-whitespace"));
-    }
-
-    #[test]
-    fn reports_an_unquoted_colon() {
-        let issues = scan_text("  - echo a: b\n");
-        assert!(issues.iter().any(|i| i.rule == "unquoted-colon"));
-        let issues = scan_text("  - \"echo a: b\"\n");
-        assert!(!issues.iter().any(|i| i.rule == "unquoted-colon"));
-    }
-}
+mod tests;

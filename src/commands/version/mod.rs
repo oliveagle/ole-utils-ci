@@ -157,14 +157,36 @@ pub fn release_check(cfg: &Config) -> Result<i32, String> {
         "tag_exists": state.tag_exists,
         "branch": state.branch,
     }));
+    // Go keeps the historical silent-on-success behaviour: without
+    // `--output` a clean release prints nothing and a broken one is only the
+    // `Error:` line on stderr.
+    let failure = report
+        .diagnostics
+        .first()
+        .map(|issue| issue.message.clone())
+        .unwrap_or_else(|| "release state is inconsistent".to_string());
+    if cfg.output.is_empty() {
+        if report.ok {
+            return Ok(0);
+        }
+        return Err(failure);
+    }
+    // With a mode selected Go rebuilds the payload around the one error it
+    // returned: its own summary and a single `release-check` diagnostic.
+    let mut payload = Report::new("release-check");
+    payload.extra = Some(serde_json::json!({ "release_model": cfg.release_model }));
     if report.ok {
-        report.summary = format!("release-check: {} is ready to release", state.version);
-        print!("{}", report.render_text());
+        payload.summary =
+            "release-check: release state consistent (VERSION, tag, branch, tree)".to_string();
+    } else {
+        payload.summary = "release-check: release state inconsistent".to_string();
+        payload.add(Diagnostic::error("", "release-check", failure.clone()));
+    }
+    print!("{}", payload.render(crate::output::parse_mode(&cfg.output)));
+    if report.ok {
         Ok(0)
     } else {
-        report.summary = format!("release-check: {} is not ready", state.version);
-        print!("{}", report.render_text());
-        Err(report.summary)
+        Err(failure)
     }
 }
 

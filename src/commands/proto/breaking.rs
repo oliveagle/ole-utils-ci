@@ -12,18 +12,12 @@
 
 use crate::config::Config;
 
-use super::lint::find_proto_root;
-
 /// The `buf-breaking` command.
 ///
 /// `against` is the git ref the comparison would use; the basic check has no
 /// baseline yet, so it is accepted and reported as unsupported.
-pub fn buf_breaking(cfg: &Config, against: &str) -> Result<i32, String> {
+pub fn buf_breaking(_cfg: &Config, against: &str) -> Result<i32, String> {
     println!("🔍 Checking for breaking proto changes...");
-    if find_proto_root(cfg.root()).is_none() {
-        println!("  ⚠ No proto configuration found, skipping");
-        return Ok(0);
-    }
     if against.is_empty() {
         println!("  ⚠ Breaking change detection requires git comparison — basic check only");
     } else {
@@ -40,7 +34,7 @@ mod tests {
     use crate::config::Config;
 
     #[test]
-    fn a_repo_without_protos_skips_cleanly() {
+    fn a_repo_without_protos_still_runs_the_basic_check() {
         let dir = tempfile::tempdir().unwrap();
         let mut cfg = Config::new();
         cfg.project_root = dir.path().to_path_buf();

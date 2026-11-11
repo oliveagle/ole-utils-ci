@@ -61,8 +61,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is inside the 300-line advisory budget and every function is below the
   complexity warning threshold. The splits are mechanical — flag parsing, the
   XML cursor, the outbound HTTP exchange, the command table, the watch config,
-  the git-author policy, the go-env line checks, the upgrade release API and
-  the oversized test modules — and behaviour is unchanged.
+  the git-author policy, the go-env line checks, the upgrade release API, the
+  ci-lint scanners, the buf-lint naming rules and the oversized test modules —
+  and behaviour is unchanged.
 - `make gate` also runs `ci-go-env`, so the credential scan is part of the
   repository's own quality bar.
 - `--output toon` now sorts every object's keys, recursively. Go's TOON path
@@ -95,8 +96,14 @@ These are deliberate; each is documented at the code that causes it.
   into it; the wrapper here delegates to `gomut` on `PATH`, which may be a
   different release. Everything else — the `--project-root` lift, the exit
   codes and the pass-through of every other argument — is the Go behaviour.
-- `doctor`, `bump-version` and `release-start` print a different summary.
-
+- `doctor` and `version-check` print a different report — in text mode and
+  under `--output` alike — and `release-check` names its first failure where
+  Go prints the whole dirty-file list.
+- `bump-version` and `release-start` print a different summary.
+- `buf-breaking --against <ref>` is accepted here because Go's own `--help`
+  advertises it; Go's flag parser rejects the flag as undefined.
+- `arch` also scans Cargo modules and recognises a layer from any path
+  segment; Go runs `go list` and matches only `*/<layer>`.
 - `report-bundle` writes a manifest bundle (`reports/quality-gate/bundle/`
   with the collected reports and a `manifest.json`) rather than Go's HTML
   dashboard tree. The flag set, the defaults and the exit codes are Go's.
@@ -147,7 +154,31 @@ These are deliberate; each is documented at the code that causes it.
   anything; the dry-run check happens before any filesystem or git change.
 - Global flags are now accepted after positional arguments, so
   `bump-version patch --dry-run` no longer ignores the flag.
-- `ci-lint`, `go-pin`, `goversion` and `buf-lint` skip cleanly when the
-  input they need is absent instead of failing the run.
+- `go-pin`, `goversion` and `buf-lint` skip cleanly when the input they need
+  is absent instead of failing the run. `ci-lint` does not skip: a missing
+  `.gitlab-ci.yml` is an error in Go and an error here too.
+- `ci-lint` runs Go's whole check set again: the missing-file error, the
+  text-level scan (unquoted colon, tab, trailing whitespace), the job shape
+  (`empty-job`, `no-script`, `script-not-string`, with `.template` jobs
+  exempt) and the ten-line `>` folded-block-scalar lookback, and
+  `ci-lint --output json|toon` carries the same keys as Go.
+- `arch`, `buf-lint`, `buf-breaking` and `release-check` follow Go's output
+  contract in every mode now. `arch` prints `arch: all checks passed ✓` or
+  `arch: N violation(s) found:` when no mode is selected and Go's
+  `{command, ok, violations}` document — the `%v` line for `text` — when one
+  is; `buf-lint` and `buf-breaking` write their `🔍` progress lines whatever
+  `--output` says, the way Go's text-only commands do; `buf-lint` reports a
+  missing proto directory the way Go does instead of inventing a structured
+  skip; and `release-check` emits Go's envelope with its single
+  `release-check` diagnostic instead of a summary of its own.
+- `arch` records the intra-project imports of a Go project again. The graph
+  keyed packages by directory while an import spells the full module path, so
+  every edge was dropped and the check reported "all checks passed" on a
+  repository Go itself flags. Packages are keyed by import path now, and the
+  rule names and wording are Go's (`cycle-detection`, `layer-dependency`,
+  `circular dependency: …`, `layer 'x' must not depend on layer 'y'`).
+- `buf-breaking` runs its basic check whatever the project contains. Go only
+  skips when the proto tree cannot be walked, so a repository without protos
+  gets the "basic check only" verdict rather than a skip line.
 - The `report-bundle` manifest ends with a newline, and generated `reports/`
   output is excluded from the source-scanning gates.

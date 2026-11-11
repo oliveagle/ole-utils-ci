@@ -195,11 +195,31 @@ fn rust_dependencies(
     deps
 }
 
-/// The Go packages of the project, keyed by their directory.
+/// The Go packages of the project, keyed by their import path — the same
+/// spelling `go list` uses, so an import in a source file is a node key.
 fn go_packages(root: &Path) -> BTreeMap<String, Vec<std::path::PathBuf>> {
+    let module = go_module(root);
     let mut packages: BTreeMap<String, Vec<std::path::PathBuf>> = BTreeMap::new();
-    collect_go_packages(root, root, &mut packages, 0);
+    collect_go_packages(root, root, &mut packages, 0, module.as_deref());
     packages
+}
+
+/// The module path `go.mod` declares, when the project has one.
+fn go_module(root: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(root.join("go.mod")).ok()?;
+    text.lines()
+        .find_map(|line| line.trim().strip_prefix("module "))
+        .map(|path| path.trim().to_string())
+}
+
+/// The import path of the package in `relative`: the module path plus the
+/// directory, or the bare directory when the project declares no module.
+fn go_import_path(module: Option<&str>, relative: &str) -> String {
+    match module {
+        Some(module) if relative.is_empty() || relative == "." => module.to_string(),
+        Some(module) => format!("{module}/{relative}"),
+        None => relative.to_string(),
+    }
 }
 
 /// Collects the Go packages of one directory, recursively.
@@ -208,6 +228,7 @@ fn collect_go_packages(
     dir: &Path,
     packages: &mut BTreeMap<String, Vec<std::path::PathBuf>>,
     depth: usize,
+    module: Option<&str>,
 ) {
     if depth > 6 {
         return;
@@ -222,17 +243,18 @@ fn collect_go_packages(
             if matches!(name.as_str(), "vendor" | "node_modules" | ".git" | "target") {
                 continue;
             }
-            collect_go_packages(root, &path, packages, depth + 1);
+            collect_go_packages(root, &path, packages, depth + 1, module);
             continue;
         }
         if path.extension().and_then(|e| e.to_str()) != Some("go") {
             continue;
         }
         let relative = path.strip_prefix(root).unwrap_or(&path);
-        let key = relative
+        let directory = relative
             .parent()
             .map(|p| p.to_string_lossy().replace('\\', "/"))
-            .unwrap_or_else(|| ".".to_string());
+            .unwrap_or_default();
+        let key = go_import_path(module, &directory);
         packages.entry(key).or_default().push(path);
     }
 }
