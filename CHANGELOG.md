@@ -52,6 +52,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the exit-code, text and JSON contracts.
 - `blaze` build support through `scripts/blaze.sh`, which works around the
   user-namespace restrictions of sandboxed containers.
+- The `blaze` release is pinned in `Cargo.toml` under
+  `[workspace.metadata.blaze]`, so every machine and every CI job builds the
+  workspace with the same `blaze` version.
 - The repository dogfoods the tool: every gate runs against this repository in
   `make gate`.
 
