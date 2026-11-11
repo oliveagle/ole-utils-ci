@@ -67,7 +67,7 @@ impl Report {
     /// structured modes expose identical keys.
     pub fn render_toon(&self) -> String {
         let value = serde_json::to_value(self).unwrap_or(serde_json::Value::Null);
-        match toon_format::encode_default(&value) {
+        match toon_format::encode_default(&sort_object_keys(value)) {
             Ok(text) => {
                 if text.ends_with('\n') {
                     text
@@ -91,7 +91,7 @@ pub fn encode_value(mode: &str, pretty: bool, value: &serde_json::Value) -> Resu
     let selected = if pretty { "json" } else { mode };
     match selected.trim().to_ascii_lowercase().as_str() {
         "" | "toon" => {
-            let text = toon_format::encode_default(value)
+            let text = toon_format::encode_default(&sort_object_keys(value.clone()))
                 .map_err(|e| format!("toon encode failed: {e}"))?;
             Ok(with_newline(text))
         }
@@ -109,6 +109,33 @@ pub fn encode_value(mode: &str, pretty: bool, value: &serde_json::Value) -> Resu
         _ => Err(format!(
             "unknown --output {mode:?}; use toon, json, or text"
         )),
+    }
+}
+
+/// Puts every JSON object's keys into lexicographic order, recursively.
+///
+/// The Go original prepares TOON input with `json.Marshal(v)` followed by
+/// `json.Unmarshal` into an `any`. Every object therefore arrives at the
+/// encoder as a `map[string]any`, and Go renders maps with their keys sorted.
+/// This crate's `serde_json` is built with `preserve_order`, so the struct
+/// field order would otherwise leak into the TOON rendering and diverge from
+/// the original. JSON mode is untouched: `json.Marshal` on a struct keeps the
+/// declaration order, which is exactly what `render_json` already does.
+fn sort_object_keys(value: serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut entries: Vec<(String, serde_json::Value)> = map
+                .into_iter()
+                .map(|(k, v)| (k, sort_object_keys(v)))
+                .collect();
+            // Byte-wise, the same ordering Go's `sort.Strings` produces.
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            serde_json::Value::Object(entries.into_iter().collect())
+        }
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.into_iter().map(sort_object_keys).collect())
+        }
+        other => other,
     }
 }
 
@@ -134,6 +161,25 @@ mod encode_tests {
         assert!(text.contains("b: 2"), "{text}");
         assert!(text.contains("a: 1"), "{text}");
         assert!(text.ends_with('\n'));
+    }
+
+    #[test]
+    fn toon_sorts_every_object_level_the_way_go_does() {
+        let text = encode_value("", false, &sample()).unwrap();
+        assert_eq!(text, "a: 1\nb: 2\n");
+
+        // Nesting is sorted too: Go unmarshals each object into a map.
+        let nested = serde_json::json!({"z": {"y": 1, "x": 2}, "a": [{"q": 1, "p": 2}]});
+        let text = encode_value("toon", false, &nested).unwrap();
+        assert_eq!(text, "a[1]{p,q}:\n  2,1\nz:\n  x: 2\n  y: 1\n");
+    }
+
+    #[test]
+    fn json_and_text_keep_the_original_key_order() {
+        let text = encode_value("text", false, &sample()).unwrap();
+        assert_eq!(text, "{\"b\":2,\"a\":1}\n");
+        let pretty = encode_value("json", false, &sample()).unwrap();
+        assert_eq!(pretty, "{\n  \"b\": 2,\n  \"a\": 1\n}\n");
     }
 
     #[test]
