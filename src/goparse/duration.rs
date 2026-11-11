@@ -20,61 +20,74 @@ pub fn parse_duration(raw: &str) -> Option<i64> {
     }
     let mut total: u64 = 0;
     while !rest.is_empty() {
-        let before = rest.len();
-        let (mut value, remainder) = leading_int(rest)?;
+        let (value, remainder) = parse_segment(rest)?;
         rest = remainder;
-        let pre = before != rest.len();
-        let mut fraction: u64 = 0;
-        let mut scale = 1.0f64;
-        let mut post = false;
-        if let Some(after_dot) = rest.strip_prefix('.') {
-            rest = after_dot;
-            let length = rest.len();
-            let (digits, divisor, remainder) = leading_fraction(rest);
-            fraction = digits;
-            scale = divisor;
-            rest = remainder;
-            post = length != rest.len();
-        }
-        if !pre && !post {
-            return None;
-        }
-        let unit_len = rest
-            .char_indices()
-            .find(|(_, c)| *c == '.' || c.is_ascii_digit())
-            .map(|(index, _)| index)
-            .unwrap_or(rest.len());
-        if unit_len == 0 {
-            return None;
-        }
-        let unit = unit_nanos(&rest[..unit_len])?;
-        rest = &rest[unit_len..];
-        if value > (1u64 << 63) / unit {
-            return None;
-        }
-        value *= unit;
-        if fraction > 0 {
-            let add = (fraction as f64) * (unit as f64 / scale);
-            value = value.saturating_add(add as u64);
-            if value > (1u64 << 63) {
-                return None;
-            }
-        }
         total = total.checked_add(value)?;
         if total > (1u64 << 63) {
             return None;
         }
     }
-    if negative {
-        if total == 1u64 << 63 {
-            return Some(i64::MIN);
-        }
-        return Some(-(total as i64));
+    signed(total, negative)
+}
+
+/// Folds the sign back into the accumulated magnitude.
+fn signed(total: u64, negative: bool) -> Option<i64> {
+    if !negative {
+        return (total < (1u64 << 63)).then_some(total as i64);
     }
-    if total > (1u64 << 63) - 1 {
+    if total == 1u64 << 63 {
+        return Some(i64::MIN);
+    }
+    Some(-(total as i64))
+}
+
+/// Parses one `number unit` term and returns its nanoseconds and the rest.
+fn parse_segment(raw: &str) -> Option<(u64, &str)> {
+    let (leading, remainder) = leading_int(raw)?;
+    let pre = remainder.len() != raw.len();
+    let (fraction, scale, rest, post) = split_fraction(remainder);
+    if !pre && !post {
         return None;
     }
-    Some(total as i64)
+    let unit_len = rest
+        .char_indices()
+        .find(|(_, c)| *c == '.' || c.is_ascii_digit())
+        .map(|(index, _)| index)
+        .unwrap_or(rest.len());
+    if unit_len == 0 {
+        return None;
+    }
+    let unit = unit_nanos(&rest[..unit_len])?;
+    let rest = &rest[unit_len..];
+    if leading > (1u64 << 63) / unit {
+        return None;
+    }
+    let mut value = leading * unit;
+    if fraction > 0 {
+        let add = (fraction as f64) * (unit as f64 / scale);
+        value = value.saturating_add(add as u64);
+        if value > (1u64 << 63) {
+            return None;
+        }
+    }
+    Some((value, rest))
+}
+
+/// Splits the optional fractional part off a term.
+///
+/// The flag reports whether at least one digit followed the dot, which is
+/// what separates `5.s` (accepted) from `.s` (rejected).
+fn split_fraction(raw: &str) -> (u64, f64, &str, bool) {
+    let Some(after_dot) = raw.strip_prefix('.') else {
+        return (0, 1.0, raw, false);
+    };
+    let (digits, divisor, remainder) = leading_fraction(after_dot);
+    (
+        digits,
+        divisor,
+        remainder,
+        remainder.len() != after_dot.len(),
+    )
 }
 
 /// `time`'s `leadingInt`: the digits before the unit.

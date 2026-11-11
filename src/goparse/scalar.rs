@@ -32,64 +32,62 @@ fn parse_uint(raw: &str) -> Result<u64, NumError> {
     if raw.is_empty() {
         return Err(NumError::Syntax);
     }
-    let mut base: u64 = 10;
-    let mut digits = raw;
-    if raw.as_bytes()[0] == b'0' {
-        if raw.len() >= 3 {
-            match raw.as_bytes()[1].to_ascii_lowercase() {
-                b'b' => {
-                    base = 2;
-                    digits = &raw[2..];
-                }
-                b'o' => {
-                    base = 8;
-                    digits = &raw[2..];
-                }
-                b'x' => {
-                    base = 16;
-                    digits = &raw[2..];
-                }
-                _ => {
-                    base = 8;
-                    digits = &raw[1..];
-                }
-            }
-        } else {
-            base = 8;
-            digits = &raw[1..];
-        }
-    }
+    let (base, digits) = split_base(raw);
     let cutoff = u64::MAX / base + 1;
     let mut underscores = false;
     let mut value: u64 = 0;
     for &byte in digits.as_bytes() {
-        let digit = if byte == b'_' {
+        if byte == b'_' {
             underscores = true;
             continue;
-        } else if byte.is_ascii_digit() {
-            u64::from(byte - b'0')
-        } else if byte.is_ascii_alphabetic() {
-            u64::from(byte.to_ascii_lowercase() - b'a' + 10)
-        } else {
-            return Err(NumError::Syntax);
-        };
-        if digit >= base {
-            return Err(NumError::Syntax);
         }
-        if value >= cutoff {
-            return Err(NumError::Range);
-        }
-        value *= base;
-        let next = value + digit;
-        if next < value {
-            return Err(NumError::Range);
-        }
-        value = next;
+        value = push_digit(value, byte, base, cutoff)?;
     }
     if underscores && !underscore_ok(raw) {
         return Err(NumError::Syntax);
     }
     Ok(value)
+}
+
+/// Splits Go's `0b` / `0o` / `0x` prefixes off `raw`.
+fn split_base(raw: &str) -> (u64, &str) {
+    if raw.as_bytes()[0] != b'0' {
+        return (10, raw);
+    }
+    let marker = raw.as_bytes().get(1).map(u8::to_ascii_lowercase);
+    if raw.len() >= 3 {
+        match marker {
+            Some(b'b') => return (2, &raw[2..]),
+            Some(b'o') => return (8, &raw[2..]),
+            Some(b'x') => return (16, &raw[2..]),
+            _ => {}
+        }
+    }
+    (8, &raw[1..])
+}
+
+/// Folds one digit into `value`, refusing anything that leaves the base or
+/// overflowed `u64`.
+fn push_digit(value: u64, byte: u8, base: u64, cutoff: u64) -> Result<u64, NumError> {
+    let digit = if byte.is_ascii_digit() {
+        u64::from(byte - b'0')
+    } else if byte.is_ascii_alphabetic() {
+        u64::from(byte.to_ascii_lowercase() - b'a' + 10)
+    } else {
+        return Err(NumError::Syntax);
+    };
+    if digit >= base {
+        return Err(NumError::Syntax);
+    }
+    if value >= cutoff {
+        return Err(NumError::Range);
+    }
+    let scaled = value * base;
+    let next = scaled + digit;
+    if next < scaled {
+        return Err(NumError::Range);
+    }
+    Ok(next)
 }
 
 /// `strconv.ParseFloat(s, 64)`, including the hex-float extension.
@@ -135,6 +133,22 @@ fn parse_hex_float(negative: bool, rest: &str) -> Result<f64, NumError> {
     if mantissa.is_empty() || exponent.is_empty() {
         return Err(NumError::Syntax);
     }
+    let (value, digits) = scan_mantissa(mantissa)?;
+    if digits == 0 {
+        return Err(NumError::Syntax);
+    }
+    if value == 0.0 {
+        return Ok(if negative { -0.0 } else { 0.0 });
+    }
+    let scaled = value * 2f64.powi(parse_exponent(exponent)?);
+    if scaled.is_infinite() {
+        return Err(NumError::Range);
+    }
+    Ok(if negative { -scaled } else { scaled })
+}
+
+/// Accumulates a hex mantissa, returning its value and its digit count.
+fn scan_mantissa(mantissa: &str) -> Result<(f64, usize), NumError> {
     let mut value = 0.0f64;
     let mut scale = 1.0f64;
     let mut fractional = false;
@@ -159,17 +173,7 @@ fn parse_hex_float(negative: bool, rest: &str) -> Result<f64, NumError> {
             value = value * 16.0 + digit;
         }
     }
-    if digits == 0 {
-        return Err(NumError::Syntax);
-    }
-    if value == 0.0 {
-        return Ok(if negative { -0.0 } else { 0.0 });
-    }
-    let scaled = value * 2f64.powi(parse_exponent(exponent)?);
-    if scaled.is_infinite() {
-        return Err(NumError::Range);
-    }
-    Ok(if negative { -scaled } else { scaled })
+    Ok((value, digits))
 }
 
 /// The `p` exponent of a hex float, clamped to where it still matters.

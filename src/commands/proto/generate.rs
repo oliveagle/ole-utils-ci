@@ -10,7 +10,9 @@
 //! or hand-mangled file that a generator would otherwise choke on, without
 //! pulling a compiler into a dependency-free gate.
 
+use std::iter::Peekable;
 use std::path::Path;
+use std::str::Chars;
 
 use crate::config::Config;
 
@@ -56,34 +58,14 @@ fn check_braces(source: &str) -> Result<(), String> {
     let mut depth = 0usize;
     let mut chars = source.chars().peekable();
     while let Some(ch) = chars.next() {
+        if ch == '/' && skip_comment(chars.peek().copied(), &mut chars) {
+            continue;
+        }
+        if ch == '"' || ch == '\'' {
+            skip_literal(ch, &mut chars);
+            continue;
+        }
         match ch {
-            '/' if chars.peek() == Some(&'/') => {
-                for c in chars.by_ref() {
-                    if c == '\n' {
-                        break;
-                    }
-                }
-            }
-            '/' if chars.peek() == Some(&'*') => {
-                chars.next();
-                let mut previous = '\0';
-                for c in chars.by_ref() {
-                    if previous == '*' && c == '/' {
-                        break;
-                    }
-                    previous = c;
-                }
-            }
-            '"' | '\'' => {
-                let quote = ch;
-                while let Some(c) = chars.next() {
-                    if c == '\\' {
-                        chars.next();
-                    } else if c == quote {
-                        break;
-                    }
-                }
-            }
             '{' => depth += 1,
             '}' => {
                 depth = depth
@@ -94,12 +76,55 @@ fn check_braces(source: &str) -> Result<(), String> {
         }
     }
     if depth == 0 {
-        Ok(())
-    } else {
-        Err(format!("{depth} unclosed block(s)"))
+        return Ok(());
+    }
+    Err(format!("{depth} unclosed block(s)"))
+}
+
+/// Skips a `//` or `/* */` comment that starts at `open`.
+///
+/// `open` is the character after the slash, or `None` at end of input. The
+/// return value says whether a comment was consumed.
+fn skip_comment<'a>(open: Option<char>, chars: &mut Peekable<Chars<'a>>) -> bool {
+    match open {
+        Some('/') => {
+            for c in chars.by_ref() {
+                if c == '\n' {
+                    break;
+                }
+            }
+            true
+        }
+        Some('*') => {
+            chars.next();
+            skip_block_comment(chars);
+            true
+        }
+        _ => false,
     }
 }
 
+/// Skips the body of a `/* */` comment, ending past its closing `*/`.
+fn skip_block_comment(chars: &mut Peekable<Chars<'_>>) {
+    let mut previous = '\0';
+    for c in chars.by_ref() {
+        if previous == '*' && c == '/' {
+            break;
+        }
+        previous = c;
+    }
+}
+
+/// Skips a string or rune literal, honouring backslash escapes.
+fn skip_literal(quote: char, chars: &mut Peekable<Chars<'_>>) {
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            chars.next();
+        } else if c == quote {
+            break;
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

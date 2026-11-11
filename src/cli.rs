@@ -241,161 +241,18 @@ impl FlagSet {
     pub fn was_provided(&self, name: &str) -> bool {
         self.provided.contains(&self.resolve(name))
     }
-
-    /// Parses `argv`, filling in registered flags and collecting positionals.
-    ///
-    /// The rules are Go's `flag` rules: parsing stops at the first
-    /// positional argument, `--` terminates the flags, `-name=value` carries
-    /// an inline value, and `-h` / `-help` answer with [`ParseError::Help`]
-    /// when neither of them is registered.
-    pub fn parse(&mut self, argv: &[String]) -> Result<(), ParseError> {
-        let mut positionals: Vec<String> = Vec::new();
-        let mut i = 0;
-        while i < argv.len() {
-            let arg = &argv[i];
-            // Go stops as soon as a token is not a flag: `len(s) < 2 || s[0] != '-'`.
-            if arg.len() < 2 || !arg.starts_with('-') {
-                positionals.extend_from_slice(&argv[i..]);
-                break;
-            }
-            if arg == "--" {
-                positionals.extend_from_slice(&argv[i + 1..]);
-                break;
-            }
-            let dashes = if arg.starts_with("--") { 2 } else { 1 };
-            let body = &arg[dashes..];
-            if body.starts_with('-') || body.starts_with('=') {
-                return Err(ParseError::BadSyntax { arg: arg.clone() });
-            }
-            let (raw_name, inline) = match body.split_once('=') {
-                Some((name, value)) => (name.to_string(), Some(value.to_string())),
-                None => (body.to_string(), None),
-            };
-            let name = self.resolve(&raw_name);
-            let Some(kind) = self.kinds.get(&name).copied() else {
-                if raw_name == "h" || raw_name == "help" {
-                    return Err(ParseError::Help);
-                }
-                return Err(ParseError::UnknownFlag { name: raw_name });
-            };
-            self.provided.insert(name.clone());
-            match kind {
-                FlagKind::Bool => {
-                    let raw = inline.unwrap_or_else(|| "true".to_string());
-                    let value = self.coerce(&raw_name, kind, raw)?;
-                    self.values.insert(name, value);
-                }
-                _ => {
-                    let raw = match inline {
-                        Some(v) => v,
-                        None => {
-                            i += 1;
-                            argv.get(i)
-                                .cloned()
-                                .ok_or_else(|| ParseError::MissingValue {
-                                    name: raw_name.clone(),
-                                })?
-                        }
-                    };
-                    // Go's list flags ignore an empty value and keep the old one.
-                    if !(kind == FlagKind::List && raw.is_empty()) {
-                        let value = self.coerce(&raw_name, kind, raw)?;
-                        self.values.insert(name, value);
-                    }
-                }
-            }
-            i += 1;
-        }
-        self.args = positionals;
-        Ok(())
-    }
-
-    /// Coerces one raw value into the flag's type, worded like Go's `flag`.
-    fn coerce(&self, name: &str, kind: FlagKind, raw: String) -> Result<FlagValue, ParseError> {
-        match kind {
-            FlagKind::Str => Ok(FlagValue::Str(raw)),
-            FlagKind::Int => {
-                goparse::parse_int(&raw)
-                    .map(FlagValue::Int)
-                    .map_err(|e| ParseError::InvalidValue {
-                        name: name.to_string(),
-                        value: raw,
-                        reason: e.as_str().to_string(),
-                    })
-            }
-            // Go's durationValue reports every refusal as `parse error`.
-            FlagKind::Duration => goparse::parse_duration(&raw)
-                .map(FlagValue::Duration)
-                .ok_or_else(|| ParseError::InvalidValue {
-                    name: name.to_string(),
-                    value: raw,
-                    reason: "parse error".to_string(),
-                }),
-            // Go splits on commas without trimming: `strings.Split(value, ",")`.
-            FlagKind::List => Ok(FlagValue::List(raw.split(',').map(String::from).collect())),
-            FlagKind::Bool => match parse_go_bool(&raw) {
-                Some(value) => Ok(FlagValue::Bool(value)),
-                None => Err(ParseError::InvalidBoolValue {
-                    name: name.to_string(),
-                    value: raw,
-                    reason: "parse error".to_string(),
-                }),
-            },
-        }
-    }
-}
-
-/// `time.Duration.String` for the values a flag default can hold: whole
-/// seconds first, then the smaller units, with the sign out front.
-fn duration_string(nanos: i64) -> String {
-    if nanos == 0 {
-        return "0s".to_string();
-    }
-    let sign = if nanos < 0 { "-" } else { "" };
-    let mut rest = nanos.unsigned_abs() as u128;
-    let hours = rest / 3_600_000_000_000;
-    rest %= 3_600_000_000_000;
-    let minutes = rest / 60_000_000_000;
-    rest %= 60_000_000_000;
-    let mut out = String::new();
-    if hours > 0 {
-        out.push_str(&format!("{hours}h"));
-    }
-    if minutes > 0 {
-        out.push_str(&format!("{minutes}m"));
-    }
-    if hours > 0 || minutes > 0 || rest >= 1_000_000_000 {
-        let secs = rest / 1_000_000_000;
-        let frac = rest % 1_000_000_000;
-        if frac == 0 {
-            out.push_str(&format!("{secs}s"));
-        } else {
-            let digits = format!("{frac:09}");
-            out.push_str(&format!("{}.{}s", secs, digits.trim_end_matches('0')));
-        }
-    } else if rest >= 1_000_000 {
-        out.push_str(&format!("{}ms", rest / 1_000_000));
-    } else if rest >= 1_000 {
-        out.push_str(&format!("{}us", rest / 1_000));
-    } else {
-        out.push_str(&format!("{rest}ns"));
-    }
-    format!("{sign}{out}")
-}
-
-/// `strconv.ParseBool`: exactly the spellings Go's boolean flags accept.
-fn parse_go_bool(raw: &str) -> Option<bool> {
-    match raw {
-        "1" | "t" | "T" | "TRUE" | "true" | "True" => Some(true),
-        "0" | "f" | "F" | "FALSE" | "false" | "False" => Some(false),
-        _ => None,
-    }
 }
 
 mod local;
+mod parse;
 mod usage;
+mod values;
+
 pub use local::report_parse_error;
 pub use usage::GLOBAL_USAGE;
+pub use values::parse_go_bool;
+
+use values::duration_string;
 
 #[cfg(test)]
 mod tests;

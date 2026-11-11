@@ -12,7 +12,7 @@
 use crate::config::Config;
 use crate::output::{Diagnostic, Report, Severity};
 
-use super::git_author::{check, gather, load_config, Verdict};
+use super::git_author::{check, gather, load_config, GitAuthorConfig, Identity, Verdict};
 
 /// Splits the `git-author` argument list into the sub-command, the
 /// `--config` path and the flags left for the global parser.
@@ -57,110 +57,169 @@ pub fn git_author(cfg: &Config, sub: &str, config_path: &str) -> Result<i32, Str
     let verdict = check(&config, &id);
 
     let mut report = Report::new("git-author");
-    let mut applied: Option<(String, String)> = None;
-
-    match sub {
+    let applied = match sub {
         "show" => {
-            report.ok = true;
-            match (&verdict.rule, verdict.ok) {
-                (None, _) => {
-                    report.summary = format!(
-                        "git-author: remote {} — no rule matched (identity not enforced)",
-                        id.remote
-                    );
-                }
-                (Some(_), true) => {
-                    report.summary = format!(
-                        "git-author: {} satisfies rule {:?}",
-                        id.email,
-                        description(&verdict)
-                    );
-                }
-                _ => {
-                    report.summary = format!("git-author: {}", verdict.reason);
-                    report.add(Diagnostic {
-                        severity: Severity::Warning,
-                        path: String::new(),
-                        line: 0,
-                        col: 0,
-                        rule: "git-author".to_string(),
-                        message: verdict.reason.clone(),
-                        detail: hint(&verdict),
-                    });
-                }
-            }
+            show(&mut report, &id, &verdict);
+            None
         }
         "check" => {
-            if verdict.ok {
-                report.ok = true;
-                if verdict.rule.is_none() {
-                    report.summary = "git-author: no rule for this remote (skipped)".to_string();
-                } else {
-                    report.summary = format!(
-                        "git-author: {} satisfies rule {:?}",
-                        id.email,
-                        description(&verdict)
-                    );
-                }
-            } else {
-                report.ok = false;
-                report.summary = "git-author: identity does not match required rule".to_string();
-                report.add(Diagnostic {
-                    severity: Severity::Error,
-                    path: String::new(),
-                    line: 0,
-                    col: 0,
-                    rule: "git-author".to_string(),
-                    message: verdict.reason.clone(),
-                    detail: hint(&verdict),
-                });
-            }
+            enforce(&mut report, &id, &verdict);
+            None
         }
-        "fix" => {
-            if verdict.rule.is_none() {
-                report.ok = true;
-                report.summary = "git-author: no rule matched — nothing to fix".to_string();
-            } else if verdict.ok {
-                report.ok = true;
-                report.summary = format!(
-                    "git-author: {} already satisfies rule {:?} — nothing to fix",
-                    id.email,
-                    description(&verdict)
-                );
-            } else {
-                let root = cfg.root();
-                crate::git::run(
-                    root,
-                    &["config", "--local", "user.email", &verdict.expected_email],
-                )
-                .map_err(|e| format!("git-author: set user.email failed: {e}"))?;
-                if !verdict.expected_name.is_empty() {
-                    crate::git::run(
-                        root,
-                        &["config", "--local", "user.name", &verdict.expected_name],
-                    )
-                    .map_err(|e| format!("git-author: set user.name failed: {e}"))?;
-                }
-                report.ok = true;
-                report.summary = format!(
-                    "git-author: repo-local identity updated to {} <{}>",
-                    verdict.expected_name, verdict.expected_email
-                );
-                applied = Some((
-                    verdict.expected_email.clone(),
-                    verdict.expected_name.clone(),
-                ));
-            }
-        }
+        "fix" => fix(cfg, &mut report, &id, &verdict)?,
         other => {
             return Err(format!(
                 "git-author: unknown subcommand {other:?} — use show, check, or fix"
             ));
         }
+    };
+    report.extra = Some(serde_json::Value::Object(payload(
+        sub,
+        &id,
+        &verdict,
+        &config,
+        applied.as_ref(),
+    )));
+    if cfg.structured() {
+        print!("{}", report.render(cfg.output_mode()));
+    } else {
+        print_text(&report);
     }
+    if report.ok {
+        return Ok(0);
+    }
+    Err("git-author: identity violates policy".to_string())
+}
 
-    // The Go original marshals a `map[string]any`, whose keys are sorted;
-    // build the payload in the same order so `--output json` matches.
+/// `git-author: <email> satisfies rule "<description>"`.
+fn satisfied(id: &Identity, verdict: &Verdict) -> String {
+    format!(
+        "git-author: {} satisfies rule {:?}",
+        id.email,
+        description(verdict)
+    )
+}
+
+/// The `show` sub-command: report the verdict, but never fail.
+fn show(report: &mut Report, id: &Identity, verdict: &Verdict) {
+    report.ok = true;
+    if verdict.rule.is_none() {
+        report.summary = format!(
+            "git-author: remote {} — no rule matched (identity not enforced)",
+            id.remote
+        );
+        return;
+    }
+    if verdict.ok {
+        report.summary = satisfied(id, verdict);
+        return;
+    }
+    report.summary = format!("git-author: {}", verdict.reason);
+    report.add(Diagnostic {
+        severity: Severity::Warning,
+        path: String::new(),
+        line: 0,
+        col: 0,
+        rule: "git-author".to_string(),
+        message: verdict.reason.clone(),
+        detail: hint(verdict),
+    });
+}
+
+/// The `check` sub-command: fail when the identity violates the rule.
+fn enforce(report: &mut Report, id: &Identity, verdict: &Verdict) {
+    if verdict.ok {
+        report.ok = true;
+        report.summary = if verdict.rule.is_none() {
+            "git-author: no rule for this remote (skipped)".to_string()
+        } else {
+            satisfied(id, verdict)
+        };
+        return;
+    }
+    report.ok = false;
+    report.summary = "git-author: identity does not match required rule".to_string();
+    report.add(Diagnostic {
+        severity: Severity::Error,
+        path: String::new(),
+        line: 0,
+        col: 0,
+        rule: "git-author".to_string(),
+        message: verdict.reason.clone(),
+        detail: hint(verdict),
+    });
+}
+
+/// The `fix` sub-command: write the expected identity into the repo config.
+fn fix(
+    cfg: &Config,
+    report: &mut Report,
+    id: &Identity,
+    verdict: &Verdict,
+) -> Result<Option<(String, String)>, String> {
+    if verdict.rule.is_none() {
+        report.ok = true;
+        report.summary = "git-author: no rule matched — nothing to fix".to_string();
+        return Ok(None);
+    }
+    if verdict.ok {
+        report.ok = true;
+        report.summary = format!(
+            "git-author: {} already satisfies rule {:?} — nothing to fix",
+            id.email,
+            description(verdict)
+        );
+        return Ok(None);
+    }
+    let root = cfg.root();
+    set_local(root, "user.email", &verdict.expected_email)?;
+    if !verdict.expected_name.is_empty() {
+        set_local(root, "user.name", &verdict.expected_name)?;
+    }
+    report.ok = true;
+    report.summary = format!(
+        "git-author: repo-local identity updated to {} <{}>",
+        verdict.expected_name, verdict.expected_email
+    );
+    Ok(Some((
+        verdict.expected_email.clone(),
+        verdict.expected_name.clone(),
+    )))
+}
+
+/// Writes one repository-local git setting.
+fn set_local(root: &std::path::Path, key: &str, value: &str) -> Result<(), String> {
+    crate::git::run(root, &["config", "--local", key, value])
+        .map(|_| ())
+        .map_err(|e| format!("git-author: set {key} failed: {e}"))
+}
+
+/// Writes the summary and, when the verdict failed, the hint under it.
+fn print_text(report: &Report) {
+    if !report.summary.is_empty() {
+        println!("{}", report.summary);
+    }
+    if report.ok {
+        return;
+    }
+    for diagnostic in &report.diagnostics {
+        if !diagnostic.detail.is_empty() {
+            println!("  hint: {}", diagnostic.detail);
+        }
+    }
+}
+
+/// The structured payload.
+///
+/// The Go original marshals a `map[string]any`, whose keys are sorted; the
+/// map below is inserted in the same order so `--output json` matches.
+fn payload(
+    sub: &str,
+    id: &Identity,
+    verdict: &Verdict,
+    config: &GitAuthorConfig,
+    applied: Option<&(String, String)>,
+) -> serde_json::Map<String, serde_json::Value> {
     let mut fields = serde_json::Map::new();
     if let Some((email, name)) = applied {
         fields.insert("applied_email".to_string(), serde_json::json!(email));
@@ -185,26 +244,7 @@ pub fn git_author(cfg: &Config, sub: &str, config_path: &str) -> Result<i32, Str
     ] {
         fields.insert(key.to_string(), value);
     }
-    report.extra = Some(serde_json::Value::Object(fields));
-    if cfg.structured() {
-        print!("{}", report.render(cfg.output_mode()));
-    } else {
-        if !report.summary.is_empty() {
-            println!("{}", report.summary);
-        }
-        if !report.ok {
-            for diagnostic in &report.diagnostics {
-                if !diagnostic.detail.is_empty() {
-                    println!("  hint: {}", diagnostic.detail);
-                }
-            }
-        }
-    }
-    if report.ok {
-        Ok(0)
-    } else {
-        Err("git-author: identity violates policy".to_string())
-    }
+    fields
 }
 
 /// The `hint:` line printed under a failing summary.
