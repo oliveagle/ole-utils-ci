@@ -16,6 +16,7 @@ pub mod fsutil;
 pub mod gates;
 pub mod git;
 pub mod gitlab;
+pub mod gojson;
 pub mod goparse;
 pub mod httpd;
 pub mod output;

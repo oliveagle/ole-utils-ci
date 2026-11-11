@@ -76,11 +76,20 @@ impl TokenSource {
             &["get", &self.dotvault_key],
         )?;
         if !output.success {
+            // Go wraps the `exec.ExitError` and then the combined output, so
+            // its message reads `exit status 1: <output>`.
+            let status = match output.code {
+                Some(code) => format!("exit status {code}"),
+                None => "signal: killed".to_string(),
+            };
             let detail = output.output.trim();
             if detail.is_empty() {
-                return Err(format!("dotvault get {} failed", self.dotvault_key));
+                return Err(format!("dotvault get {}: {}", self.dotvault_key, status));
             }
-            return Err(format!("dotvault get {}: {}", self.dotvault_key, detail));
+            return Err(format!(
+                "dotvault get {}: {}: {}",
+                self.dotvault_key, status, detail
+            ));
         }
         let token = output.output.trim().to_string();
         if token.is_empty() {

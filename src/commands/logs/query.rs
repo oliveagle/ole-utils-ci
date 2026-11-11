@@ -65,8 +65,8 @@ fn stamp(value: &DateTime<FixedOffset>) -> String {
 ///
 /// `encoding/json` sorts map keys, so both objects are built as `BTreeMap`s
 /// and reach the server with the keys in the same order Go produces. Go's
-/// `json.Marshal` also HTML-escapes string bodies, which [`escape_html`]
-/// reproduces.
+/// `json.Marshal` also HTML-escapes string bodies, which
+/// [`crate::gojson::to_go_json`] reproduces.
 pub(super) fn build_request_body(
     cfg: &LogsConfig,
     from: &DateTime<FixedOffset>,
@@ -89,7 +89,7 @@ pub(super) fn build_request_body(
         "request_body".to_string(),
         serde_json::to_value(&body).unwrap_or_default(),
     );
-    escape_html(&serde_json::to_string(&payload).unwrap_or_default()).into_bytes()
+    crate::gojson::to_go_json(&serde_json::to_string(&payload).unwrap_or_default()).into_bytes()
 }
 
 /// `logsQuery`: one request, then the entries.
@@ -156,7 +156,7 @@ impl ClogEntry {
                 map.insert(name.to_string(), serde_json::json!(value));
             }
         }
-        escape_html(&serde_json::to_string(&map).unwrap_or_default())
+        crate::gojson::to_go_json(&serde_json::to_string(&map).unwrap_or_default())
     }
 
     /// `ClogEntry.String()`: `logTime[:19] [level] title  content`, with TWO
@@ -228,15 +228,4 @@ fn entry_from(node: &xml::Node) -> ClogEntry {
         service_code: node.child_text("serviceCode"),
         operation: node.child_text("operationName"),
     }
-}
-
-/// `encoding/json.Marshal` escapes `<`, `>`, `&` and the two Unicode line
-/// separators inside strings; `serde_json` leaves them alone. None of the
-/// five can appear outside a JSON string, so plain replacement is exact.
-fn escape_html(json: &str) -> String {
-    json.replace('&', "\\u0026")
-        .replace('<', "\\u003c")
-        .replace('>', "\\u003e")
-        .replace('\u{2028}', "\\u2028")
-        .replace('\u{2029}', "\\u2029")
 }

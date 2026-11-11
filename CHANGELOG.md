@@ -32,6 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitLab commands: `pipeline-run`, `logs` and `captain-ci-test`, each verified
   against the Go binary on stdout, stderr, exit code and — for the two that
   post a body — the exact request bytes.
+- `pipeline-watch`, the per-repo CI dashboard. It reads the same YAML the Go
+  tool reads, honours `--config`, `--base-url`, `--interval`, `--per-repo` and
+  `--json`, and paints the same table with the same key bindings. The row
+  layout, the colours, the column widths, the cache TTLs, the JSON snapshot
+  and the error wording are verified against the Go binary, snapshot and frame
+  alike.
 - Release workflow: `workflow` with its `list`, `apps`, `release-rc`,
   `test-rc`, `integration-rc`, `deploy-prod`, `promote`, `prod-verify`,
   `scenarios` and `status` subcommands, plus named-workflow dispatch
@@ -63,10 +69,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a Go map, and Go renders maps in key order; the Rust renderer used to leak
   struct declaration order instead. JSON output is unchanged: it keeps
   declaration order, the way `json.Marshal` does for a struct.
-
-### Not yet ported
-
-- `pipeline-watch` (the interactive TUI dashboard) remains Go-only.
+- `pipeline-watch` drives the Go original's *legacy* dashboard loop, which
+  repaints the whole frame on every change. The Go TUI uses the alternate
+  screen buffer and diffs the frames instead, so it keeps the scrollback and
+  updates only the cells that changed. The log viewer (`enter`), the
+  repository-status sub-view, the favourites store and mouse support are not
+  ported yet.
 
 ### Known divergences
 

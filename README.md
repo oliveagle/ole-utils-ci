@@ -140,8 +140,32 @@ devine-utils-ci all --output toon
 | Command | What it does |
 |---------|--------------|
 | `pipeline-run` | Trigger a GitLab pipeline for a project (needs `GITLAB_TOKEN`). |
+| `pipeline-watch` | The per-repo CI dashboard: one row per watched project. |
 | `logs` | Query or tail Clog logs (needs `OSG_CLOG_TOKEN`). |
 | `captain-ci-test` | Reproduce the Captain-CI Test job artifacts. |
+
+`pipeline-watch` reads the same YAML the Go tool reads — `base_url`, `token`,
+`refresh.interval_seconds`, `per_repo`, `local_root` and a `repos` list of
+`group:` / `project:` entries — and takes `--config`, `--base-url`,
+`--interval`, `--per-repo` and `--json`. `--json` prints one snapshot and
+exits; without it the command paints the dashboard and reads keys until `q`.
+The key set is the Go one: `q` quits, `r` refreshes, `+` / `-` move the
+refresh interval, `j` / `k` move the selection, `o` opens the selected
+pipeline in the browser.
+
+Three parts of the Go command are not in the Rust port yet:
+
+- the bubbletea TUI. The Rust port drives the Go original's *legacy* loop,
+  which repaints the whole frame on every change. The Go TUI uses the
+  alternate screen buffer and diffs the frames instead, so it keeps the
+  scrollback and updates only the cells that changed.
+- the log viewer (`enter`), the repository-status sub-view and the favourites
+  store.
+- mouse support.
+
+Everything else — the row layout, the colours, the column widths, the key
+bindings, the cache TTLs, the JSON snapshot and the error wording — is
+verified against the Go binary, snapshot and frame alike.
 
 ### Release workflow
 
@@ -177,10 +201,10 @@ runs the default one (`devine-golang-mcp-app`). Every subcommand takes
 | `ci-recipe` | Render or download the downstream CI artifact recipe. |
 | `upgrade` | Download and install a specific version from GitLab releases. |
 
-### Not yet ported
+### Porting status
 
-`pipeline-watch` (the interactive TUI dashboard) is still Go-only. Everything
-else in the Go command surface is implemented here.
+The whole Go command surface is implemented here. The parts of `pipeline-watch`
+that are still missing are listed above.
 
 Every command accepts `--output json` or `--output toon` where it reports
 findings, and every command exits `0` on success, `1` on a failed check or an

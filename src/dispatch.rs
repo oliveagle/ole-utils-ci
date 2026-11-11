@@ -81,6 +81,9 @@ pub fn dispatch(command: &str, args: &[String]) -> Result<i32, String> {
         // Go hands `pipeline-run` its raw args: the command owns a private
         // flag set the shared parser must not see.
         "pipeline-run" => commands::pipeline_run::pipeline_run(args),
+        // Go hands `pipeline-watch` its raw args: the command owns a private
+        // flag set the shared parser must not see.
+        "pipeline-watch" => commands::pipeline_watch::pipeline_watch(args),
         // Go hands `logs` its raw args: the command owns a private flag set
         // the shared parser must not see.
         "logs" => commands::logs::logs(args),
