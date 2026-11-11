@@ -129,7 +129,7 @@ fn detect_shell(line: &str) -> Option<&'static str> {
 pub fn focused_command(args: &[String]) -> Result<i32, String> {
     let root = focused::root_default(args);
     let config = lint_config::load(&root)?;
-    let resolved = lint_config::resolve(&config);
+    let resolved = lint_config::resolve(&root, &config);
     let mut fs = focused::base(&root, args);
     fs.str_flag("dirs", &resolved.no_shell.dirs.join(","));
     fs.str_flag(
@@ -155,7 +155,7 @@ pub fn focused_command(args: &[String]) -> Result<i32, String> {
 }
 
 /// One finding as the shared report sees it.
-fn to_diagnostic(finding: &ShellFinding) -> Diagnostic {
+pub(crate) fn to_diagnostic(finding: &ShellFinding) -> Diagnostic {
     Diagnostic::error(
         finding.path.clone(),
         finding.rule.clone(),

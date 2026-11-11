@@ -203,7 +203,7 @@ fn running_go_version(dir: &Path) -> Result<String, String> {
 pub fn focused_command(args: &[String]) -> Result<i32, String> {
     let root = focused::root_default(args);
     let config = lint_config::load(&root)?;
-    let resolved = lint_config::resolve(&config).go_pin;
+    let resolved = lint_config::resolve(&root, &config).go_pin;
     let mut fs = focused::base(&root, args);
     fs.str_flag("version-file", &resolved.version_file);
     fs.str_flag("ci-file", &resolved.ci_file);

@@ -20,6 +20,19 @@ mod run;
 
 pub use run::Failure;
 
+/// Lints the configured paths and prints the text result.
+///
+/// The `lint` command owns the policy — the paths, the engine and the
+/// `--fail-on` severity — so this is the entry point it uses. The complaint
+/// is the one Go's `runConfiguredWebLint` returns.
+pub fn lint_paths(options: &Options) -> Result<(), String> {
+    match run::run(options) {
+        Ok(_) => Ok(()),
+        Err(run::Failure::Io(message)) => Err(message),
+        Err(run::Failure::Usage(error)) => Err(format!("{} ({})", error.message, error.code)),
+    }
+}
+
 /// The default per-run file cap.
 const DEFAULT_MAX_FILES: i64 = 200;
 

@@ -87,6 +87,12 @@ impl Runner {
     }
 
     /// Runs a command with an explicit timeout.
+    ///
+    /// Both output streams are drained by reader threads while the child
+    /// runs, so a command that writes more than a pipe buffer cannot wedge
+    /// the wait loop. A command killed by the timeout comes back as a
+    /// finished [`CmdOutput`] with `signal: killed` semantics — the shape
+    /// Go's `CommandContext` produces, partial output included.
     pub fn run_with_timeout(
         &self,
         timeout: Duration,
@@ -107,53 +113,49 @@ impl Runner {
         }
         let mut child = cmd
             .spawn()
-            .map_err(|e| format!("{program} {} failed: {e}", args.join(" ")))?;
+            .map_err(|error| spawn_error(program, &self.dir, &error))?;
+        let mut pipes: Vec<Box<dyn std::io::Read + Send>> = Vec::new();
+        if let Some(stdout) = child.stdout.take() {
+            pipes.push(Box::new(stdout));
+        }
+        if let Some(stderr) = child.stderr.take() {
+            pipes.push(Box::new(stderr));
+        }
+        let readers: Vec<_> = pipes
+            .into_iter()
+            .map(|mut pipe| {
+                std::thread::spawn(move || {
+                    use std::io::Read;
+                    let mut buf = String::new();
+                    let _ = pipe.read_to_string(&mut buf);
+                    buf
+                })
+            })
+            .collect();
         let started = Instant::now();
-        loop {
+        let status = loop {
             match child.try_wait() {
-                Ok(Some(status)) => {
-                    let mut output = String::new();
-                    let mut out_text = String::new();
-                    let mut err_text = String::new();
-                    if let Some(mut out) = child.stdout.take() {
-                        use std::io::Read;
-                        let mut buf = String::new();
-                        let _ = out.read_to_string(&mut buf);
-                        output.push_str(&buf);
-                        out_text = buf;
-                    }
-                    if let Some(mut err) = child.stderr.take() {
-                        use std::io::Read;
-                        let mut buf = String::new();
-                        let _ = err.read_to_string(&mut buf);
-                        output.push_str(&buf);
-                        err_text = buf;
-                    }
-                    let code = status.code();
-                    let success = status.success();
-                    return Ok(CmdOutput {
-                        output,
-                        stdout: out_text,
-                        stderr: err_text,
-                        success,
-                        code,
-                    });
-                }
+                Ok(Some(status)) => break status,
                 Ok(None) => {
                     if started.elapsed() > timeout {
                         let _ = child.kill();
                         let _ = child.wait();
-                        return Err(format!(
-                            "{program} {} timed out after {}s",
-                            args.join(" "),
-                            timeout.as_secs()
-                        ));
+                        return Ok(collect(readers, None));
                     }
                     std::thread::sleep(Duration::from_millis(20));
                 }
-                Err(e) => return Err(format!("{program} {} failed: {e}", args.join(" "))),
+                Err(error) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!(
+                        "{program} {} failed: {}",
+                        args.join(" "),
+                        crate::commands::ci_recipe_util::go_errno(&error)
+                    ));
+                }
             }
-        }
+        };
+        Ok(collect(readers, Some(status)))
     }
 
     /// Runs a command and returns an error containing its output on failure.
@@ -183,20 +185,16 @@ impl Runner {
         for (key, value) in &self.env {
             cmd.env(key, value);
         }
+        // Go's `cmd.Run()` hands back `*exec.ExitError` (`exit status 1`)
+        // or the `exec.Error` a failed lookup produced; captain-ci-test
+        // quotes either one verbatim.
         let status = cmd
             .status()
-            .map_err(|e| format!("{program} {} failed: {e}", args.join(" ")))?;
+            .map_err(|error| spawn_error(program, &self.dir, &error))?;
         if status.success() {
             Ok(())
         } else {
-            Err(format!(
-                "{program} {} failed with exit code {}",
-                args.join(" "),
-                status
-                    .code()
-                    .map(|c| c.to_string())
-                    .unwrap_or_else(|| "unknown".into())
-            ))
+            Err(crate::process::exit_status(&status))
         }
     }
 
@@ -223,77 +221,61 @@ fn is_executable(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Go's `ExitError.Error()` wording: `exit status 3`, or `signal: killed`.
-fn exit_text(status: &std::process::ExitStatus) -> String {
-    match status.code() {
-        Some(code) => format!("exit status {code}"),
-        None => "signal: killed".to_string(),
+/// Joins the reader threads into the combined output of one finished child.
+fn collect(
+    readers: Vec<std::thread::JoinHandle<String>>,
+    status: Option<std::process::ExitStatus>,
+) -> CmdOutput {
+    let mut streams: Vec<String> = readers
+        .into_iter()
+        .map(|reader| reader.join().unwrap_or_default())
+        .collect();
+    let stderr = if streams.len() > 1 {
+        streams.pop().unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let stdout = streams.pop().unwrap_or_default();
+    let mut output = stdout.clone();
+    output.push_str(&stderr);
+    CmdOutput {
+        output,
+        stdout,
+        stderr,
+        success: status.map(|s| s.success()).unwrap_or(false),
+        code: status.and_then(|s| s.code()),
     }
 }
 
+/// Go's error for a child that never started.
+///
+/// A failed `PATH` lookup reads `exec: "go": executable file not found in
+/// $PATH`; a working directory that vanished reads `chdir ...`; anything
+/// else is the `fork/exec` form.
+fn spawn_error(program: &str, dir: &Path, error: &std::io::Error) -> String {
+    if error.kind() == std::io::ErrorKind::NotFound {
+        if !program.contains('/') && !Runner::command_exists(program) {
+            return format!("exec: \"{program}\": executable file not found in $PATH");
+        }
+        if !dir.exists() {
+            return format!(
+                "chdir {}: {}",
+                dir.display(),
+                crate::commands::ci_recipe_util::go_errno(error)
+            );
+        }
+    }
+    format!(
+        "fork/exec {program}: {}",
+        crate::commands::ci_recipe_util::go_errno(error)
+    )
+}
+
+mod go;
 mod pipe;
 
+pub(crate) use go::exit_text;
+pub use go::{tail_4096, GoRun};
+
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn detects_missing_commands() {
-        assert!(!Runner::command_exists("definitely-not-a-real-command-xyz"));
-        assert!(Runner::command_exists("sh"));
-    }
-
-    #[test]
-    fn captures_output() {
-        let r = Runner::new(".", false);
-        let out = r.run("sh", &["-c", "echo hi"]).unwrap();
-        assert!(out.contains("hi"));
-    }
-
-    #[test]
-    fn reports_failure_with_output() {
-        let r = Runner::new(".", false);
-        let err = r
-            .run_checked("sh", &["-c", "echo boom >&2; exit 3"])
-            .unwrap_err();
-        assert!(err.contains("boom"));
-        assert!(err.contains("exit code 3"));
-    }
-
-    #[test]
-    fn passes_extra_environment_to_the_child() {
-        let r = Runner::new(".", false).with_env("DEVINE_UTILS_CI_PROBE", "yes");
-        let out = r
-            .run("sh", &["-c", "printf '%s' \"$DEVINE_UTILS_CI_PROBE\""])
-            .unwrap();
-        assert_eq!(out, "yes");
-    }
-
-    #[test]
-    fn pipes_producer_output_into_the_consumer() {
-        let dir = tempfile::tempdir().unwrap();
-        let out = dir.path().join("out.txt");
-        let r = Runner::new(".", false);
-        r.run_pipe(&["sh", "-c", "printf abc; printf def >&2"], &["cat"], &out)
-            .unwrap();
-        let got = std::fs::read_to_string(&out).unwrap();
-        let mut chars: Vec<char> = got.chars().collect();
-        chars.sort_unstable();
-        assert_eq!(chars, vec!['a', 'b', 'c', 'd', 'e', 'f'], "{got}");
-    }
-
-    #[test]
-    fn reports_consumer_failures() {
-        let dir = tempfile::tempdir().unwrap();
-        let out = dir.path().join("out.txt");
-        let r = Runner::new(".", false);
-        let err = r
-            .run_pipe(
-                &["sh", "-c", "printf abc"],
-                &["sh", "-c", "cat >/dev/null; exit 4"],
-                &out,
-            )
-            .unwrap_err();
-        assert!(err.contains("exit status 4"), "{err}");
-    }
-}
+mod tests;

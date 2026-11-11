@@ -38,6 +38,50 @@ pub fn should_skip_dir(name: &str) -> bool {
     SKIP_DIRS.contains(&name)
 }
 
+/// Go's `filepath.Join(root, rel)`: concatenate with `/`, then `Clean`.
+///
+/// Unlike [`PathBuf::join`], a later absolute element does not reset the
+/// result — Go's `Join` only cleans the joined string, so
+/// `Join("/root", "/tmp/x.xml")` is `/root/tmp/x.xml`.
+pub fn go_join(root: &Path, rel: &str) -> PathBuf {
+    let mut joined = root.to_string_lossy().to_string();
+    if !joined.ends_with('/') {
+        joined.push('/');
+    }
+    joined.push_str(rel);
+    PathBuf::from(go_clean(&joined))
+}
+
+/// Go's `path.Clean` for one slash-separated path.
+fn go_clean(path: &str) -> String {
+    let rooted = path.starts_with('/');
+    let mut segments: Vec<&str> = Vec::new();
+    for segment in path.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => match segments.last() {
+                Some(&last) if last != ".." => {
+                    segments.pop();
+                }
+                Some(_) if !rooted => segments.push(".."),
+                None if !rooted => segments.push(".."),
+                _ => {}
+            },
+            other => segments.push(other),
+        }
+    }
+    let mut cleaned = String::new();
+    if rooted {
+        cleaned.push('/');
+    }
+    cleaned.push_str(&segments.join("/"));
+    if cleaned.is_empty() {
+        ".".to_string()
+    } else {
+        cleaned
+    }
+}
+
 /// A file discovered under the project root.
 #[derive(Debug, Clone)]
 pub struct Entry {
@@ -199,6 +243,23 @@ mod tests {
         assert_eq!(count_text_lines(b"a\n"), 1);
         assert_eq!(count_text_lines(b"a\nb\n"), 2);
         assert_eq!(count_text_lines(b"a\nb"), 2);
+    }
+
+    #[test]
+    fn go_join_follows_path_filepath() {
+        assert_eq!(
+            go_join(Path::new("/root"), "/tmp/x.xml"),
+            PathBuf::from("/root/tmp/x.xml")
+        );
+        assert_eq!(
+            go_join(Path::new("/root"), "../x.xml"),
+            PathBuf::from("/x.xml")
+        );
+        assert_eq!(
+            go_join(Path::new("/root"), "junit.xml"),
+            PathBuf::from("/root/junit.xml")
+        );
+        assert_eq!(go_join(Path::new("/root"), ""), PathBuf::from("/root"));
     }
 
     #[test]

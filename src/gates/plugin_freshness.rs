@@ -26,7 +26,7 @@ use crate::static_regex;
 pub fn focused_command(args: &[String]) -> Result<i32, String> {
     let root = focused::root_default(args);
     let config = lint_config::load(&root)?;
-    let resolved = lint_config::resolve(&config);
+    let resolved = lint_config::resolve(&root, &config);
     let mut fs = focused::base(&root, args);
     fs.str_flag("source-dir", &resolved.plugin.source_dir);
     fs.str_flag("plugins-dir", &resolved.plugin.plugins_dir);
@@ -47,7 +47,7 @@ pub fn focused_command(args: &[String]) -> Result<i32, String> {
 ///
 /// Returns the stale findings and the `checked` / `skipped` / `stale`
 /// counters the report carries.
-fn check(
+pub(crate) fn check(
     root: &Path,
     source_dir: &str,
     plugins_dir: &str,

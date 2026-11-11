@@ -87,6 +87,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repository-status sub-view, the favourites store and mouse support are not
   ported yet.
 
+- `install`, `lint`, `test`, `build`, `coverage` and `test-report` now follow
+  the Go original end to end. `install` walks the same proxy list — the one
+  the environment names, the internal one, the public one and finally
+  `direct` — and falls back to the next one only when the failure looks like
+  a proxy or network problem. `lint` installs the dependencies first, reads
+  `.devine-utils-ci.yaml` and then runs `gofmt -s` over the first-party
+  trees, `go mod edit -fmt`, `go vet`, `golangci-lint` and the
+  config-driven gates. `test` and `build` print Go's banners and word their
+  failures the way Go words them. `coverage` filters the generated code out
+  of the coverprofile, averages the function percentages per package and
+  writes the same HTML and JSON reports. `test-report` writes the JUnit XML
+  Go's `encoding/xml` writes.
 ### Known divergences
 
 These are deliberate; each is documented at the code that causes it.
@@ -115,6 +127,9 @@ These are deliberate; each is documented at the code that causes it.
 - `report-bundle` writes a manifest bundle (`reports/quality-gate/bundle/`
   with the collected reports and a `manifest.json`) rather than Go's HTML
   dashboard tree. The flag set, the defaults and the exit codes are Go's.
+- The coverage report lists its packages and the JUnit report lists its
+  suites in sorted order. Go iterates a map there, so its order changes from
+  run to run; sorting keeps two runs over the same module comparable.
 - `web-lint` has Go's flag set, result envelope and exit codes, but its
   engines are a dependency-free scanner — tag structure for HTML, bracket
   structure for CSS and scripts — rather than Go's HTML parser plus
@@ -123,6 +138,14 @@ These are deliberate; each is documented at the code that causes it.
 
 ### Fixed
 
+- `install`, `lint`, `test`, `build`, `coverage` and `test-report` print Go's
+  banners and fail with Go's wording. They used to print their own lines
+  (`🔨 Building...`, `📈 Measuring line coverage...`, `📝 Generating the
+  JUnit report...`) and to report a bare `tests failed` or `build failed`,
+  so a CI job could not tell the Rust build from the Go one. The coverage
+  gate now names the packages that fall short of the threshold and repeats
+  the remediation Go asks for, and the JUnit report carries Go's attributes,
+  its empty elements and its escaping.
 - `report-bundle` and `web-lint` own their flag sets again. Go builds a
   private `flag.FlagSet` for both, so their flags never reached the shared
   parser and a bad flag printed their own block: `report-bundle` exits 1,
