@@ -95,9 +95,13 @@ pub fn scan(root: &Path, rules: &[Rule]) -> Vec<RustFinding> {
 }
 
 /// Whether the file is a test file.
+///
+/// A module may keep its tests next to itself in a `tests/` directory
+/// (`src/commands/upgrade/tests/release.rs`), so any `tests` path component
+/// counts, not only the crate-level one.
 pub fn is_test_file(rel: &str) -> bool {
     let name = rel.rsplit('/').next().unwrap_or(rel);
-    let in_test_dir = rel.split('/').next() == Some("tests");
+    let in_test_dir = rel.split('/').any(|component| component == "tests");
     let named_like_a_test =
         name == "tests.rs" || name.starts_with("test_") || name.ends_with("_test.rs");
     named_like_a_test || in_test_dir
@@ -225,6 +229,7 @@ mod tests {
         assert!(is_test_file("tests/integration.rs"));
         assert!(is_test_file("src/foo_test.rs"));
         assert!(is_test_file("src/cli/tests.rs"));
+        assert!(is_test_file("src/commands/upgrade/tests/release.rs"));
         assert!(!is_test_file("src/main.rs"));
     }
 }
