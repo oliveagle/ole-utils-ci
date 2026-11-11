@@ -162,6 +162,9 @@ fn dispatch(command: &str, args: &[String]) -> Result<i32, String> {
         // Not `with_config`: Go `runFakeMetadata` ignores the global flags
         // and owns its own `--run` / `-f` switch.
         "fake-metadata-server" => commands::fake_metadata::fake_metadata(args),
+        // Go hands `pipeline-run` its raw args: the command owns a private
+        // flag set the shared parser must not see.
+        "pipeline-run" => commands::pipeline_run::pipeline_run(args),
         "report-bundle" => with_config(commands::reports::report_bundle, &mut cfg, args),
         "verify-dist" => with_config(commands::dist::verify_dist, &mut cfg, args),
         "bump-version" => bump_command(&mut cfg, args, false),
@@ -312,6 +315,9 @@ More checks:
   web-lint             Syntax sanity for the front-end sources.
   fake-metadata-server Stub the Ctrip metadata endpoint for tests.
   kms-stub             Serve a DEV ONLY local Ctrip KMS stand-in.
+
+GitLab pipelines:
+  pipeline-run         Trigger a GitLab pipeline for a project (needs GITLAB_TOKEN).
 
 Global flags:
   --project-root <path>       Repository to check (default: .).
