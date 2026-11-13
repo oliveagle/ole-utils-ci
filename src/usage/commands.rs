@@ -23,6 +23,7 @@ pub const COMMANDS: &str = r#"Commands:
   no-shell-exec        Reject production Go code that executes bash/sh.
   plugin-freshness     Reject plugin .so files older than their source.
   web-lint             Lint HTML/CSS/JS/TS/TSX/JSX; accepts path or content.
+  arch                 Run architecture rule checks (cycles, layers, naming).
   test                 Run tests with race detection.
                        Steps:
                          1. Install dependencies (go mod vendor via install)

@@ -4,21 +4,53 @@
 
 //! The command table: which subcommand runs which entry point, and which
 //! commands get their private flags lifted out before the shared parser.
+//!
+//! The table has two layers. The flat layer is the command surface the Go
+//! original had. The language layer sits in front of it: `rust`, `golang`,
+//! `tengo`, `proto`, `web` and `common` group the flat commands by the
+//! language they gate and forward to them (see [`crate::languages`]).
 
-use devine_utils_ci::commands;
-use devine_utils_ci::config::Config;
-use devine_utils_ci::gates;
+mod flat;
 
-use crate::{print_usage, GATE_COMMANDS};
+use crate::commands;
+use crate::config::Config;
+use crate::gates;
+use crate::languages;
+use crate::usage;
 
-/// Runs the requested subcommand.
+pub use flat::{has_flat_command, FLAT_COMMANDS};
+
+/// The commands that need nothing but the global flags.
+pub const GATE_COMMANDS: [&str; 9] = [
+    "bugs",
+    "sanity",
+    "license",
+    "structure",
+    "file-length",
+    "complexity",
+    "package-size",
+    "artifact-size",
+    "goversion",
+];
+
+/// Runs the requested subcommand.///
+/// A language group is resolved first: it forwards to the flat command that
+/// does the work, so `rust clippy` and `rust-clippy` run the same gate.
 pub fn dispatch(command: &str, args: &[String]) -> Result<i32, String> {
+    if let Some(lang) = languages::find(command) {
+        return languages::run(lang, args);
+    }
+    dispatch_flat(command, args)
+}
+
+/// Runs a flat subcommand, without the language-group indirection.
+pub(crate) fn dispatch_flat(command: &str, args: &[String]) -> Result<i32, String> {
     if matches!(command, "help" | "-h" | "--help") {
-        print_usage();
+        usage::print();
         return Ok(0);
     }
     if matches!(command, "version" | "--version") {
-        println!("{}", devine_utils_ci::version_banner());
+        println!("{}", crate::version_banner());
         return Ok(0);
     }
     let mut cfg = Config::new();
@@ -112,7 +144,7 @@ pub fn dispatch(command: &str, args: &[String]) -> Result<i32, String> {
         // rather than routing it through the `Error:` prefix on stderr.
         other => {
             println!("Unknown command: {other}\n");
-            print_usage();
+            usage::print();
             Ok(1)
         }
     }

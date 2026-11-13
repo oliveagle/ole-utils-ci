@@ -193,7 +193,56 @@ Flags the Go usage block leaves out:
                        same thing from the environment.
 "#;
 
+/// The language groups this build adds on top of the Go command list.
+const LANGUAGE: &str = r#"
+Language groups (the same commands, grouped by the language they gate):
+  golang   Go toolchain, mutation testing and the Go-specific gates.
+  rust     The Rust gates: fmt, clippy, test, build, doc, audit, policies.
+  tengo    The Tengo tool gates: unit tests, coverage and mutation testing.
+  proto    The protobuf gates: buf lint, breaking changes and code generation.
+  web      The web gate: HTML, CSS, JavaScript and TypeScript.
+  common   The language-agnostic gates every project runs.
+
+  devine-utils-ci golang test        # same as devine-utils-ci test
+  devine-utils-ci rust clippy        # same as devine-utils-ci rust-clippy
+  devine-utils-ci tengo test         # same as devine-utils-ci tengo-test
+  devine-utils-ci golang             # every Go gate, in order
+
+Standalone per-language binaries (the same behaviour, shorter name):
+  ole-utils-ci      the whole tool
+  ole-utils-golang  the golang group
+  ole-utils-rust    the rust group
+  ole-utils-tengo   the tengo group
+  ole-utils-proto   the proto group
+  ole-utils-web     the web group
+  ole-utils-common  the common group
+"#;
+
 /// Prints the usage block on standard output, the way `fmt.Print` does.
 pub fn print() {
-    print!("{HEADER}{}{REST}{ADDED}", commands::COMMANDS);
+    print!("{HEADER}{}{REST}{ADDED}{LANGUAGE}", commands::COMMANDS);
+}
+
+/// Prints the usage block of one language group.
+///
+/// The block names the standalone binary and the subcommand form, so the
+/// user can move between the two spellings without reading the manual.
+pub fn print_language(lang: &crate::languages::Language) {
+    let binary = crate::languages::binary_name(lang);
+    println!("{binary} — the {} gates of devine-utils-ci", lang.title);
+    println!();
+    println!("Usage:");
+    println!("  {binary} <command> [flags]");
+    println!("  devine-utils-ci {} <command> [flags]", lang.name);
+    println!();
+    println!("Commands:");
+    for (sub, _command, description) in lang.commands {
+        println!("  {sub:<18}{description}");
+    }
+    println!();
+    println!(
+        "  Run `{binary}` without a command to run every {} gate in order.",
+        lang.title
+    );
+    println!("  Run `devine-utils-ci help` for the full command list and the global flags.");
 }

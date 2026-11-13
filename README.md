@@ -26,6 +26,13 @@ scripts/blaze.sh install
 The release profile is tuned for shipping: thin LTO, one codegen unit,
 `panic = "abort"` and stripped symbols.
 
+Installing the package installs the language-scoped binaries as well:
+`ole-utils-ci` (the whole tool under the repository's name) plus one binary
+per language group — `ole-utils-golang`, `ole-utils-rust`,
+`ole-utils-tengo`, `ole-utils-proto`, `ole-utils-web` and
+`ole-utils-common`. See [Language groups](#language-groups).
+
+
 ## Quick start
 
 ```sh
@@ -46,6 +53,45 @@ devine-utils-ci all --output toon
 ```
 
 ## Commands
+
+### Language groups
+
+The commands below are flat: the language is part of the name
+(`tengo-test`, `rust-clippy`, `go-pin`). Every command is also reachable
+through the language group it belongs to, so a repository that mixes
+languages can be driven one language at a time:
+
+```sh
+devine-utils-ci golang test        # same as `devine-utils-ci test`
+devine-utils-ci rust clippy        # same as `devine-utils-ci rust-clippy`
+devine-utils-ci tengo test         # same as `devine-utils-ci tengo-test`
+devine-utils-ci proto breaking     # same as `devine-utils-ci buf-breaking`
+devine-utils-ci common bugs        # same as `devine-utils-ci bugs`
+
+devine-utils-ci golang             # every Go gate, in order
+```
+
+| Group | Owns |
+|-------|------|
+| `golang` | `install`, `lint`, `test`, `build`, `coverage`, `branch-coverage`, `test-report`, `gomut`, `version-check`, `go-pin`, `no-shell-exec`, `plugin-freshness`, `goversion`, `package-size` |
+| `rust` | `rust`, `rust-fmt`, `rust-clippy`, `rust-test`, `rust-build`, `rust-doc`, `rust-audit`, `rust-manifest`, `rust-unsafe`, `rust-panic`, `rust-msrv` |
+| `tengo` | `tengo-test`, `tengo-coverage`, `tengo-mutate` |
+| `proto` | `buf-lint`, `buf-breaking`, `buf-generate` |
+| `web` | `web-lint` |
+| `common` | `bugs`, `sanity`, `license`, `structure`, `file-length`, `complexity`, `arch`, `artifact-size` |
+
+Every group has a standalone binary as well, so the group can be run without
+typing the group name:
+
+```sh
+ole-utils-golang test               # same as `devine-utils-ci golang test`
+ole-utils-rust                      # every Rust gate, in order
+ole-utils-tengo --help              # the commands of the group
+```
+
+A group called without a subcommand runs its gates in order and stops at the
+first failure, exactly like `all` does. The flat commands keep working
+unchanged.
 
 ### Quality gates
 

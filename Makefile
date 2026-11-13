@@ -9,7 +9,7 @@ TARGET_DIR ?= target
 BIN := $(TARGET_DIR)/debug/devine-utils-ci
 RELEASE_BIN := $(TARGET_DIR)/release/devine-utils-ci
 
-.PHONY: all build release test lint fmt fmt-check clippy doc check gate gates rust-gates clean blaze-build blaze-test help
+.PHONY: all build release install test lint fmt fmt-check clippy doc check gate gates rust-gates clean blaze-build blaze-test help
 
 all: build
 
@@ -20,6 +20,10 @@ build:
 ## release: compile the release binary
 release:
 	$(CARGO) build --release --all-targets
+
+## install: install every binary (the tool and the language groups) into $CARGO_HOME/bin
+install:
+	$(CARGO) install --path . --locked
 
 ## test: run the unit and integration tests
 test:

@@ -9,15 +9,39 @@ repository = "https://github.com/oliveagle/ole-utils-ci"
 readme = "README.md"
 keywords = ["ci", "quality-gate", "lint", "rust"]
 categories = ["development-tools", "command-line-utilities"]
+autobins = false
 
 [[bin]]
 name = "devine-utils-ci"
 path = "src/main.rs"
 
-[lib]
-name = "devine_utils_ci"
-path = "src/lib.rs"
+[[bin]]
+name = "ole-utils-ci"
+path = "src/bin/ole_utils_ci.rs"
 
+[[bin]]
+name = "ole-utils-golang"
+path = "src/bin/ole_utils_golang.rs"
+
+[[bin]]
+name = "ole-utils-rust"
+path = "src/bin/ole_utils_rust.rs"
+
+[[bin]]
+name = "ole-utils-tengo"
+path = "src/bin/ole_utils_tengo.rs"
+
+[[bin]]
+name = "ole-utils-proto"
+path = "src/bin/ole_utils_proto.rs"
+
+[[bin]]
+name = "ole-utils-web"
+path = "src/bin/ole_utils_web.rs"
+
+[[bin]]
+name = "ole-utils-common"
+path = "src/bin/ole_utils_common.rs"
 [dependencies]
 anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
