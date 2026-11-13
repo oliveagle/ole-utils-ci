@@ -193,8 +193,9 @@ fn the_rust_only_gates_refuse_an_unknown_flag() {
     // the shared parser, which answers exactly the way every other command
     // does — the complaint and the usage block on stderr, then the `Error:`
     // line, and exit 1.
+    // `rust` itself is a language group now, so it prints the group
+    // help instead of running the gates (see tests/languages.rs).
     for command in [
-        "rust",
         "rust-fmt",
         "rust-clippy",
         "rust-test",

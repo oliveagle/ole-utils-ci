@@ -206,7 +206,10 @@ Language groups (the same commands, grouped by the language they gate):
   devine-utils-ci golang test        # same as devine-utils-ci test
   devine-utils-ci rust clippy        # same as devine-utils-ci rust-clippy
   devine-utils-ci tengo test         # same as devine-utils-ci tengo-test
-  devine-utils-ci golang             # every Go gate, in order
+  devine-utils-ci golang all         # every Go gate, in order
+
+  A group runs nothing until you name a command. `all` runs every gate of
+  the group, in order; the other subcommands run one gate.
 
 Standalone per-language binaries (the same behaviour, shorter name):
   ole-utils-ci      the whole tool
@@ -236,13 +239,15 @@ pub fn print_language(lang: &crate::languages::Language) {
     println!("  devine-utils-ci {} <command> [flags]", lang.name);
     println!();
     println!("Commands:");
+    println!(
+        "  {:<18}Every {} gate, in order.",
+        crate::languages::ALL,
+        lang.title
+    );
     for (sub, _command, description) in lang.commands {
         println!("  {sub:<18}{description}");
     }
     println!();
-    println!(
-        "  Run `{binary}` without a command to run every {} gate in order.",
-        lang.title
-    );
+    println!("  Nothing runs until you name a command.");
     println!("  Run `devine-utils-ci help` for the full command list and the global flags.");
 }

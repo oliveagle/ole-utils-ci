@@ -61,7 +61,6 @@ fn the_flat_command_name_is_accepted_too() {
         resolve("rust", "rust-clippy").as_deref(),
         Some("rust-clippy")
     );
-    assert_eq!(resolve("rust", "rust").as_deref(), Some("rust"));
     assert_eq!(
         resolve("tengo", "tengo-test").as_deref(),
         Some("tengo-test")
@@ -73,19 +72,6 @@ fn an_unknown_subcommand_resolves_to_nothing() {
     assert_eq!(resolve("rust", "nope"), None);
     assert_eq!(resolve("golang", "clippy"), None);
     assert_eq!(resolve("nope", "test"), None);
-}
-
-#[test]
-fn the_aggregate_entries_resolve() {
-    for lang in LANGUAGES {
-        for sub in lang.aggregate {
-            assert!(
-                lang.resolve(sub).is_some(),
-                "{}: the aggregate names {sub}, which the group does not know",
-                lang.name
-            );
-        }
-    }
 }
 
 #[test]
@@ -120,7 +106,32 @@ fn the_binary_name_follows_the_group_name() {
 #[test]
 fn the_aggregate_commands_are_listed_in_order() {
     let group = find("rust").expect("group");
-    assert_eq!(group.aggregate_commands(), vec!["rust"]);
+    assert_eq!(group.aggregate_commands(), ["rust"]);
     let group = find("web").expect("group");
-    assert_eq!(group.aggregate_commands(), vec!["web-lint"]);
+    assert_eq!(group.aggregate_commands(), ["web-lint"]);
+}
+
+#[test]
+fn every_aggregate_entry_is_a_command_the_dispatcher_knows() {
+    let known = known_commands();
+    for lang in LANGUAGES {
+        for command in lang.aggregate_commands() {
+            assert!(
+                known.contains(command),
+                "{}: the aggregate runs {command}, which the dispatcher does not know",
+                lang.name
+            );
+        }
+    }
+}
+
+#[test]
+fn a_flat_command_is_known_by_the_subcommand_that_forwards_to_it() {
+    let group = find("tengo").expect("group");
+    assert_eq!(group.label("tengo-test"), "test");
+    assert_eq!(group.label("tengo-mutate"), "mutate");
+    let group = find("proto").expect("group");
+    assert_eq!(group.label("buf-lint"), "lint");
+    let group = find("web").expect("group");
+    assert_eq!(group.label("web-lint"), "lint");
 }

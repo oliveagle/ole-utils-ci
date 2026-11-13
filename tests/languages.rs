@@ -131,3 +131,66 @@ fn the_alias_binary_runs_the_whole_tool() {
         "stdout: {stdout}"
     );
 }
+
+#[test]
+fn a_group_without_a_command_prints_help_and_runs_nothing() {
+    for group in ["golang", "rust", "tengo", "proto", "web", "common"] {
+        let (code, stdout, stderr) = main_binary(&[group]);
+        assert_eq!(code, 1, "{group}: stdout: {stdout}");
+        assert!(
+            stdout.contains(&format!("devine-utils-ci {group} <command>")),
+            "{group}: stdout: {stdout}"
+        );
+        assert!(
+            stdout.contains("Nothing runs until you name a command."),
+            "{group}: stdout: {stdout}"
+        );
+        assert!(!stdout.contains("── "), "{group}: a gate ran: {stdout}");
+        assert!(stderr.is_empty(), "{group}: stderr: {stderr}");
+    }
+}
+
+#[test]
+fn a_language_binary_without_a_command_prints_help_and_runs_nothing() {
+    let (code, stdout, stderr) = run(env!("CARGO_BIN_EXE_ole-utils-golang"), &[]);
+    assert_eq!(code, 1, "stdout: {stdout}");
+    assert!(
+        stdout.contains("the Go gates of devine-utils-ci"),
+        "stdout: {stdout}"
+    );
+    assert!(!stdout.contains("── "), "a gate ran: {stdout}");
+    assert!(stderr.is_empty(), "stderr: {stderr}");
+}
+
+#[test]
+fn the_group_lists_the_all_command() {
+    let (code, stdout, stderr) = main_binary(&["common", "--help"]);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert!(stdout.contains("all "), "stdout: {stdout}");
+    assert!(
+        stdout.contains("Every Common gate, in order."),
+        "stdout: {stdout}"
+    );
+}
+
+#[test]
+fn the_all_command_runs_the_gates_of_the_group() {
+    // The web group needs an input, so the aggregate stops at its first
+    // gate. The step banner is what proves the aggregate ran.
+    let (code, stdout, stderr) = main_binary(&["web", "all"]);
+    assert_eq!(code, 1, "stdout: {stdout}");
+    assert!(stdout.contains("── lint ──"), "stdout: {stdout}");
+    assert!(stdout.contains("✗ lint failed"), "stdout: {stdout}");
+    assert!(stderr.contains("Web gate(s) failed"), "stderr: {stderr}");
+}
+
+#[test]
+fn a_group_with_only_flags_prints_help_and_runs_nothing() {
+    // A flag is not a command: the group still refuses to guess what to
+    // run, so nothing starts.
+    let (code, stdout, stderr) = main_binary(&["rust", "--definitely-not-a-flag"]);
+    assert_eq!(code, 1, "stdout: {stdout}");
+    assert!(stdout.contains("Commands:"), "stdout: {stdout}");
+    assert!(!stdout.contains("── "), "a gate ran: {stdout}");
+    assert!(stderr.is_empty(), "stderr: {stderr}");
+}

@@ -68,7 +68,7 @@ devine-utils-ci tengo test         # same as `devine-utils-ci tengo-test`
 devine-utils-ci proto breaking     # same as `devine-utils-ci buf-breaking`
 devine-utils-ci common bugs        # same as `devine-utils-ci bugs`
 
-devine-utils-ci golang             # every Go gate, in order
+devine-utils-ci golang all         # every Go gate, in order
 ```
 
 | Group | Owns |
@@ -85,13 +85,14 @@ typing the group name:
 
 ```sh
 ole-utils-golang test               # same as `devine-utils-ci golang test`
-ole-utils-rust                      # every Rust gate, in order
+ole-utils-rust all                  # every Rust gate, in order
 ole-utils-tengo --help              # the commands of the group
 ```
 
-A group called without a subcommand runs its gates in order and stops at the
-first failure, exactly like `all` does. The flat commands keep working
-unchanged.
+A group runs nothing until you name a command: on its own it prints
+the commands it has and exits. `all` runs every gate of the group, in
+order, and stops at the first failure, exactly like `all` does. The flat
+commands keep working unchanged.
 
 ### Quality gates
 

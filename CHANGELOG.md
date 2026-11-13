@@ -19,10 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `cargo install --path .`: `ole-utils-ci` (the whole tool under the
   repository's name), `ole-utils-golang`, `ole-utils-rust`, `ole-utils-tengo`,
   `ole-utils-proto`, `ole-utils-web` and `ole-utils-common`.
-- A group called without a subcommand runs its gates in order and stops at the
-  first failure, the way `all` does. `devine-utils-ci rust` keeps its
-  previous meaning — every Rust gate — because the flat command owns that
-  name.
+- A group runs nothing until you name a command: on its own it prints
+  the commands it has and exits with status 1. `all` runs every gate of the
+  group, in order, and stops at the first failure, the way `all` does.
 
 
 ## [0.11.7] — 2026-11-11

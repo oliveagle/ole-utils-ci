@@ -95,7 +95,6 @@ pub const LANGUAGES: &[Language] = &[
         title: "Rust",
         summary: "The Rust gates: fmt, clippy, test, build, doc, audit and the policy gates.",
         commands: &[
-            ("all", "rust", "Every Rust gate, in order."),
             ("fmt", "rust-fmt", "cargo fmt --check."),
             (
                 "clippy",
@@ -123,7 +122,7 @@ pub const LANGUAGES: &[Language] = &[
             ),
             ("msrv", "rust-msrv", "The declared MSRV must be supported."),
         ],
-        aggregate: &["all"],
+        aggregate: &["rust"],
     },
     Language {
         name: "tengo",
@@ -142,7 +141,7 @@ pub const LANGUAGES: &[Language] = &[
                 "Run the Tengo source mutation testing.",
             ),
         ],
-        aggregate: &["test", "coverage", "mutate"],
+        aggregate: &["tengo-test", "tengo-coverage", "tengo-mutate"],
     },
     Language {
         name: "proto",
@@ -161,14 +160,14 @@ pub const LANGUAGES: &[Language] = &[
                 "Generate code from the proto files.",
             ),
         ],
-        aggregate: &["lint", "breaking"],
+        aggregate: &["buf-lint", "buf-breaking"],
     },
     Language {
         name: "web",
         title: "Web",
         summary: "The web gate: HTML, CSS, JavaScript and TypeScript.",
         commands: &[("lint", "web-lint", "Lint HTML/CSS/JS/TS/TSX/JSX.")],
-        aggregate: &["lint"],
+        aggregate: &["web-lint"],
     },
     Language {
         name: "common",

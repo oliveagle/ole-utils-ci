@@ -63,25 +63,41 @@ impl Language {
             .map(|(_, command, _)| *command)
     }
 
-    /// The flat commands the aggregate runs, in order.
-    pub fn aggregate_commands(&self) -> Vec<&'static str> {
-        self.aggregate
+    /// The name a flat command is known by inside the group.
+    ///
+    /// The subcommand that forwards to it is the label the user typed.
+    pub fn label(&self, command: &'static str) -> &'static str {
+        self.commands
             .iter()
-            .filter_map(|sub| self.resolve(sub))
-            .collect()
+            .find(|(_, flat, _)| *flat == command)
+            .map(|(alias, _, _)| *alias)
+            .unwrap_or(command)
+    }
+
+    /// The flat commands the group's `all` runs, in order.
+    pub fn aggregate_commands(&self) -> &'static [&'static str] {
+        self.aggregate
     }
 }
+
+/// The subcommand that runs every gate of a group.
+pub const ALL: &str = "all";
 
 /// Runs a language group.
 ///
 /// `args` is what follows the group name: the subcommand first, then the
 /// flags of the command it forwards to.
+///
+/// A group without a subcommand runs nothing: it prints the commands it
+/// has and exits. Only an explicit command starts a gate, so a mistyped
+/// group name can never run the wrong thing.
 pub fn run(lang: &Language, args: &[String]) -> Result<i32, String> {
     match subcommand(args) {
         Some("help") => {
             usage::print_language(lang);
             Ok(0)
         }
+        Some(ALL) => aggregate(lang, &args[1..]),
         Some(sub) => match lang.resolve(sub) {
             Some(command) => dispatch::dispatch_flat(command, &args[1..]),
             None => {
@@ -95,13 +111,8 @@ pub fn run(lang: &Language, args: &[String]) -> Result<i32, String> {
                 usage::print_language(lang);
                 return Ok(0);
             }
-            // The flat surface may already own the group name: `rust` runs
-            // every Rust gate on its own and keeps its own error wording.
-            // The group only steps in when it has no flat twin.
-            if dispatch::has_flat_command(lang.name) {
-                return dispatch::dispatch_flat(lang.name, args);
-            }
-            aggregate(lang, args)
+            usage::print_language(lang);
+            Ok(1)
         }
     }
 }
@@ -127,21 +138,19 @@ fn wants_help(args: &[String]) -> bool {
 /// The first failure stops the run, exactly like the `all` command does.
 fn aggregate(lang: &Language, args: &[String]) -> Result<i32, String> {
     let mut failures: Vec<&str> = Vec::new();
-    for sub in lang.aggregate {
-        let Some(command) = lang.resolve(sub) else {
-            continue;
-        };
-        println!("── {sub} ──");
+    for command in lang.aggregate {
+        let label = lang.label(command);
+        println!("── {label} ──");
         match dispatch::dispatch_flat(command, args) {
-            Ok(0) => println!("✅ {sub} passed"),
+            Ok(0) => println!("✅ {label} passed"),
             Ok(code) => {
-                failures.push(sub);
-                println!("✗ {sub} failed (exit {code})");
+                failures.push(label);
+                println!("✗ {label} failed (exit {code})");
                 break;
             }
             Err(e) => {
-                failures.push(sub);
-                println!("✗ {sub} failed: {e}");
+                failures.push(label);
+                println!("✗ {label} failed: {e}");
                 break;
             }
         }
