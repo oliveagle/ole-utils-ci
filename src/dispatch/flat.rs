@@ -36,6 +36,7 @@ pub const FLAT_COMMANDS: &[&str] = &[
     "glab-ci-lint",
     "go-pin",
     "gomut",
+    "hook",
     "goversion",
     "install",
     "kms-stub",

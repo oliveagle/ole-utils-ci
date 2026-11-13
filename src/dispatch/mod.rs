@@ -75,6 +75,7 @@ pub(crate) fn dispatch_flat(command: &str, args: &[String]) -> Result<i32, Strin
         // Go hands `gomut` and the `tengo-*` commands their raw args: each
         // owns a private flag set the shared parser must not see.
         "gomut" => commands::gomut::gomut(args),
+        "hook" => commands::hook::hook(args),
         "tengo-test" => commands::tengo::tengo_test(args),
         "tengo-coverage" => commands::tengo::tengo_coverage(args),
         "tengo-mutate" => commands::tengo::tengo_mutate(args),

@@ -9,7 +9,7 @@ TARGET_DIR ?= target
 BIN := $(TARGET_DIR)/debug/devine-utils-ci
 RELEASE_BIN := $(TARGET_DIR)/release/devine-utils-ci
 
-.PHONY: all build release install test lint fmt fmt-check clippy doc check gate gates rust-gates clean blaze-build blaze-test help
+.PHONY: all build release install test lint fmt fmt-check clippy doc check gate gates rust-gates hooks clean blaze-build blaze-test help
 
 all: build
 
@@ -67,7 +67,11 @@ gates: build
 
 ## rust-gates: run the Rust gates only
 rust-gates: build
-	$(BIN) rust
+	$(BIN) rust all
+
+## hooks: install this tool's pre-commit, commit-msg and pre-push hooks
+hooks: build
+	$(BIN) hook install
 
 ## blaze-build: compile with blaze
 blaze-build:

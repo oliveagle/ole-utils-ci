@@ -129,6 +129,11 @@ pub const COMMANDS: &str = r#"Commands:
                          KMS_ENDPOINT=http://127.0.0.1:18080 server serve
                        Stub data file is git-ignored; never use in a deploy.
   report-bundle        Aggregate every quality-gate check (structure/hygiene/complexity/CI/release) + coverage into a browsable reports/ tree (HTML + CSV)
+  hook                 The commit and push policy checks a git hook runs:
+                         install, uninstall, status, pre-commit, commit-msg,
+                         pre-push. Defaults: 20 files/commit, 5 MiB/file,
+                         main+master only through a merge request, branch
+                         names of the <type>/<slug> form.
   all                  Run all checks (lint, test, build, coverage, etc.)
   version              Show version
   help                 Show this help

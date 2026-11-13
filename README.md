@@ -45,7 +45,7 @@ devine-utils-ci complexity
 devine-utils-ci all
 
 # The Rust gates only
-devine-utils-ci rust
+devine-utils-ci rust all
 
 # Structured output for CI annotations
 devine-utils-ci bugs --output json
@@ -67,6 +67,7 @@ devine-utils-ci rust clippy        # same as `devine-utils-ci rust-clippy`
 devine-utils-ci tengo test         # same as `devine-utils-ci tengo-test`
 devine-utils-ci proto breaking     # same as `devine-utils-ci buf-breaking`
 devine-utils-ci common bugs        # same as `devine-utils-ci bugs`
+devine-utils-ci common hook status # same as `devine-utils-ci hook status`
 
 devine-utils-ci golang all         # every Go gate, in order
 ```
@@ -78,7 +79,7 @@ devine-utils-ci golang all         # every Go gate, in order
 | `tengo` | `tengo-test`, `tengo-coverage`, `tengo-mutate` |
 | `proto` | `buf-lint`, `buf-breaking`, `buf-generate` |
 | `web` | `web-lint` |
-| `common` | `bugs`, `sanity`, `license`, `structure`, `file-length`, `complexity`, `arch`, `artifact-size` |
+| `common` | `bugs`, `sanity`, `license`, `structure`, `file-length`, `complexity`, `arch`, `artifact-size`, `hook` |
 
 Every group has a standalone binary as well, so the group can be run without
 typing the group name:
@@ -93,6 +94,56 @@ A group runs nothing until you name a command: on its own it prints
 the commands it has and exits. `all` runs every gate of the group, in
 order, and stops at the first failure, exactly like `all` does. The flat
 commands keep working unchanged.
+
+### Git hooks
+
+`hook` answers the questions that are cheap to fix before a commit exists and
+expensive to fix once it is pushed:
+
+```sh
+devine-utils-ci hook install      # pre-commit, commit-msg and pre-push
+devine-utils-ci hook status       # what is installed, and whether it is ours
+devine-utils-ci hook uninstall    # remove only the hooks we installed
+```
+
+| Hook | Refuses |
+|------|---------|
+| `pre-commit` | a commit of more than **20 files**; a staged file over **5 MiB**; `.env`, `*.pem`, `*.key`, `*.p12`, `id_rsa`, `credentials.json`; a whitespace error or conflict marker in the staged diff |
+| `commit-msg` | a message that is not `<type>(<scope>): <description>`, where `type` is one of `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`; a subject over 100 characters |
+| `pre-push` | a push to `main` or `master` — open a merge request instead; a branch whose name is not `<type>/<slug>`, e.g. `fix/ci-hook` |
+
+The numbers come from where review and history actually break down rather than
+from round figures:
+
+* **20 files per commit.** Past that a single `git show --stat` stops being one
+  idea, and the reviewer switches from "is this correct" to "did anything look
+  broken". Atomic commits — including one that renames a module boundary —
+  stay well under it. A merge commit is exempt: it carries whatever the merged
+  branch changed.
+* **5 MiB per file.** Git never forgets a blob, so one large file costs every
+  clone from then on. Source files are orders of magnitude smaller; a fixture
+  that needs more room is a decision, not an accident.
+* **`<type>/<slug>` branches.** The name says what the branch carries, matches
+  the commit types, and gives the protected-branch rule something to point at:
+  `main` is where work lands, never where it starts.
+
+Every budget is overridable, flag first, then environment, then the default:
+
+```sh
+devine-utils-ci hook pre-commit --max-files 40            # a deliberate refactor
+devine-utils-ci hook pre-commit --max-file-bytes 20m      # a fixture, on purpose
+devine-utils-ci hook pre-push --protected main,release    # protect one more branch
+HOOK_MAX_FILES=10 devine-utils-ci hook pre-commit         # same, from the environment
+```
+
+Committing on `main` is deliberately still allowed: the release flow commits
+version bumps there. The gate is the push, the moment a change becomes
+somebody else's problem.
+
+`hook install` writes a three-line shell shim per hook that `exec`s the binary
+by absolute path, so the policy lives in one place and keeps working in a shell
+that does not have the tool on `PATH`. A hook file that we did not write is
+never replaced without `--force` and never deleted at all.
 
 ### Quality gates
 

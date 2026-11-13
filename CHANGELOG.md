@@ -19,8 +19,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `cargo install --path .`: `ole-utils-ci` (the whole tool under the
   repository's name), `ole-utils-golang`, `ole-utils-rust`, `ole-utils-tengo`,
   `ole-utils-proto`, `ole-utils-web` and `ole-utils-common`.
-- A group runs nothing until you name a command: on its own it prints
-  the commands it has and exits with status 1. `all` runs every gate of the
+- The `hook` command, the policy a git hook runs on every commit and push:
+  `install`, `uninstall`, `status`, `pre-commit`, `commit-msg` and `pre-push`.
+  `pre-commit` refuses a commit of more than 20 files, a staged file over
+  5 MiB, a credential-looking path, and any whitespace error or conflict
+  marker in the staged diff; `commit-msg` requires
+  `<type>(<scope>): <description>`; `pre-push` refuses `main` and `master`
+  (merge requests only) and any branch not named `<type>/<slug>`. Every budget
+  takes a flag (`--max-files`, `--max-file-bytes`, `--protected`) and an
+  environment variable (`HOOK_MAX_FILES`, `HOOK_MAX_FILE_BYTES`,
+  `HOOK_PROTECTED_BRANCHES`). `hook install` writes shims that `exec` this
+  binary by absolute path, never replaces a hook it did not write without
+  `--force`, and honours `core.hooksPath`.
+- A bare invocation prints a short summary (the groups, the commands people
+  type, and where the full list lives) instead of the whole usage block;
+  `devine-utils-ci help` still prints the full block.
+- A group runs nothing until you name a command: on its own it prints the
+  commands it has and exits with status 1. `all` runs every gate of the
   group, in order, and stops at the first failure, the way `all` does.
 
 

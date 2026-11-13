@@ -206,6 +206,11 @@ pub const LANGUAGES: &[Language] = &[
                 "artifact-size",
                 "Check the release-artifact budgets.",
             ),
+            (
+                "hook",
+                "hook",
+                "The commit and push policy checks a git hook runs.",
+            ),
         ],
         aggregate: &[
             "bugs",

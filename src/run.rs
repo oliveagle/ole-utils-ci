@@ -35,7 +35,7 @@ pub fn entry(default_language: Option<&str>) -> ExitCode {
 /// Runs the flat command surface.
 fn run_main(command: &str, args: &[String]) -> ExitCode {
     if command.is_empty() {
-        usage::print();
+        usage::print_summary();
         return ExitCode::from(1);
     }
     if matches!(command, "version" | "--version") {
@@ -135,6 +135,9 @@ fn run_timestamped(command: &str, args: &[String]) -> ExitCode {
     let mut child = std::process::Command::new(exe);
     child.arg(command).args(args);
     child.env_remove("DEVINE_UTILS_TS");
+    // `output()` nulls standard input, and a pre-push hook is handed the
+    // refs on standard input: keep the child wired to ours.
+    child.stdin(std::process::Stdio::inherit());
     let Ok(output) = child.output() else {
         eprintln!("Error: failed to run the command");
         return ExitCode::from(1);

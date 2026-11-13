@@ -25,6 +25,7 @@ pub mod git_author_cmd;
 pub mod goenv;
 pub mod goenv_scan;
 pub mod gomut;
+pub mod hook;
 pub mod kms_stub;
 pub mod kms_stub_cmd;
 pub mod kms_stub_http;
