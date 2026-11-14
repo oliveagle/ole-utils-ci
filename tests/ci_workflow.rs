@@ -11,7 +11,7 @@
 
 use std::collections::BTreeMap;
 
-use serde_yaml::Value;
+use serde_norway::Value;
 
 /// The pipeline file of this repository.
 const WORKFLOW: &str = ".github/workflows/ci.yml";
@@ -25,7 +25,7 @@ const DRIVER: &str = "DEVINE_UTILS_RUST_DRIVER";
 /// Reads the workflow and returns its jobs.
 fn jobs() -> BTreeMap<String, Value> {
     let text = std::fs::read_to_string(WORKFLOW).expect("the workflow file exists");
-    let workflow: Value = serde_yaml::from_str(&text).expect("the workflow is valid YAML");
+    let workflow: Value = serde_norway::from_str(&text).expect("the workflow is valid YAML");
     let jobs = workflow
         .get("jobs")
         .and_then(Value::as_mapping)

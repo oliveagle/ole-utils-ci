@@ -23,7 +23,7 @@ fn a_missing_file_is_the_default_policy() {
 
 #[test]
 fn the_lint_block_is_read() {
-    let config: ProjectConfig = serde_yaml::from_str(
+    let config: ProjectConfig = serde_norway::from_str(
         "lint:\n  go_pin:\n    version_file: VERSION.go\n  no_shell_exec:\n    dirs: [a]\n",
     )
     .expect("parse");
@@ -35,7 +35,7 @@ fn the_lint_block_is_read() {
 #[test]
 fn an_explicit_switch_beats_the_default() {
     let config: ProjectConfig =
-        serde_yaml::from_str("lint:\n  go_vet: false\n  first_party_dirs: [only]\n")
+        serde_norway::from_str("lint:\n  go_vet: false\n  first_party_dirs: [only]\n")
             .expect("parse");
     let resolved = resolve(Path::new("/tmp"), &config);
     assert!(!resolved.go_vet);
@@ -54,7 +54,7 @@ fn the_toolchain_pin_switches_itself_on_when_the_file_exists() {
 #[test]
 fn the_web_pass_defaults_to_the_whole_project() {
     let config: ProjectConfig =
-        serde_yaml::from_str("lint:\n  web:\n    enabled: true\n").expect("parse");
+        serde_norway::from_str("lint:\n  web:\n    enabled: true\n").expect("parse");
     let resolved = resolve(Path::new("/tmp"), &config);
     assert!(resolved.web.enabled);
     assert_eq!(resolved.web.paths, vec!["."]);

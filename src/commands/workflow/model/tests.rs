@@ -101,7 +101,7 @@ fn apply_defaults_backfills_exactly_three_fields() {
 #[test]
 fn merge_onto_lets_only_non_zero_fields_win() {
     let mut cfg = default_workflow_config();
-    let entry: WorkflowFileEntry = serde_yaml::from_str(
+    let entry: WorkflowFileEntry = serde_norway::from_str(
         r#"
 binary_repo:
   name: renamed
@@ -141,7 +141,7 @@ test_apps:
 
 #[test]
 fn into_config_names_a_new_workflow_and_applies_the_defaults() {
-    let entry: WorkflowFileEntry = serde_yaml::from_str(
+    let entry: WorkflowFileEntry = serde_norway::from_str(
         r#"
 binary_repo:
   name: my-app

@@ -1,3 +1,35 @@
+## [0.14.0] — 2026-11-14
+
+### Changed
+
+- The dependency tree lost its heavy half. `toon-format` was pulled in with
+  its default `cli` feature, which drags ratatui, crossterm, arboard,
+  syntect, tiktoken-rs and comfy-table into a binary that only needs an
+  encoder. The feature is off now, and `Cargo.lock` is about 1200 lines
+  shorter. The TOON output is byte for byte the same — it is the same
+  encoder, without the terminal around it.
+- YAML comes from `serde_norway` now, the maintained fork of the deprecated
+  `serde_yaml`. The YAML the tool reads and writes does not change, only the
+  library behind it — and that one is still patched.
+- `deny.toml` denies a second copy of a crate instead of warning about it.
+  The tree now carries one copy of everything except `winnow`, which `toml`
+  0.9 pulls in twice (once directly, once through its own `toml_parser`),
+  and that one exception is listed with the reason.
+- The advisory ignore list of `deny.toml` is empty. The four notices it
+  carried came from `syntect` (`yaml-rust`, `bincode`), from `ratatui`
+  (`paste`) and from `serde_yaml` (`unsafe-libyaml`); all of them are gone
+  with the tree above, so nothing is ignored any more.
+
+### Fixed
+
+- `cargo doc` no longer warns about two documentation links that pointed at
+  private items.
+- `src/commands/hook/policy.rs` and `tests/hook.rs` are inside the 300-line
+  source budget again: the argument helpers moved to
+  `src/commands/hook/args.rs`, and the hook tests to `tests/hook.rs`,
+  `tests/hook_push.rs` and the shared `tests/support/mod.rs`. The
+  `file-length` gate reports no warnings at all now.
+
 ## [0.13.0] — 2026-11-14
 
 ### Added
