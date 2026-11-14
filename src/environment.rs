@@ -8,14 +8,12 @@
 //! the judge. A CI job is always the judge, so inside CI the tool refuses the
 //! ways a run could be made weaker:
 //!
-//! * `--mode dev` is refused: it narrows the scope to the changed crates and
-//!   leaves the slow gates out.
+//! * `--mode dev` is refused unless the pipeline declared it on purpose;
 //! * `DEVINE_UTILS_RUST_DRIVER=blaze` is refused in `ci` mode: a fast driver
 //!   answers from its own cache and can leave a test or a lint out.
 //!
 //! A CI pipeline states the mode it runs in the environment
-//! (`DEVINE_UTILS_REQUIRE_MODE=ci`), and the tool enforces that statement too.
-//! Neither knob can lower a run below the mode the pipeline asked for:
+//! (`DEVINE_UTILS_REQUIRE_MODE=ci`), and the tool enforces that statement too:
 //!
 //! * a job that pinned `ci` cannot be talked into running `dev`;
 //! * a job that pinned nothing cannot fall back to `dev` either — it is
@@ -60,9 +58,12 @@ pub fn requested_driver() -> Result<Option<String>, String> {
 
 /// Checks that this run may happen in `mode`.
 ///
-/// Returns the message of the first rule the run breaks.
-pub fn check(mode: Mode) -> Result<(), String> {
-    check_with(mode, required_mode()?, in_ci(), requested_driver()?)
+/// `asked` says whether the command line named the mode. A job that pins a
+/// mode and a command line that names another one contradict each other, and
+/// that is an error; a command line that names no mode at all is not a
+/// contradiction — the run then keeps the full gate, which is the safe side.
+pub fn check(mode: Mode, asked: bool) -> Result<(), String> {
+    check_with(mode, required_mode()?, in_ci(), requested_driver()?, asked)
 }
 
 /// One line describing where this run happens, for the run's output.
@@ -123,27 +124,29 @@ fn check_with(
     required: Option<Mode>,
     ci: bool,
     driver: Option<String>,
+    asked: bool,
 ) -> Result<(), String> {
-    if let Some(required) = required {
-        if required != mode {
-            return Err(format!(
-                "this environment requires --mode {}, but the run asked for {}",
-                required.as_str(),
-                mode.as_str()
-            ));
+    if asked {
+        if let Some(required) = required {
+            if required != mode {
+                return Err(format!(
+                    "this environment requires --mode {}, but the run asked for {}",
+                    required.as_str(),
+                    mode.as_str()
+                ));
+            }
         }
     }
     if !ci {
         return Ok(());
     }
-    if mode.is_dev() && required != Some(Mode::Dev) {
-        return Err(
+    if mode.is_dev() && !(asked && required == Some(Mode::Dev)) {
+        return Err(format!(
             "CI runs the authoritative gate: --mode dev is refused here \
              (it narrows the scope and leaves the slow gates out). \
              A pipeline that means to run it must say so: \
              {REQUIRE_MODE_VAR}=dev"
-                .to_string(),
-        );
+        ));
     }
     if driver.as_deref() == Some("blaze") {
         return Err(format!(

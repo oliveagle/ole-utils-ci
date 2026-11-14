@@ -12,7 +12,6 @@
 use std::path::{Path, PathBuf};
 
 use crate::cli::{FlagSet, ParseError, GLOBAL_USAGE};
-use crate::environment;
 use crate::output;
 
 /// Hard quality budgets owned by the tool, not by project configuration.
@@ -90,6 +89,8 @@ pub struct Config {
     pub cover_profile: String,
     /// The environment this run belongs to
     pub mode: Mode,
+    /// Whether `--mode` was given on the command line.
+    pub mode_set: bool,
     /// Build tags passed through to the Go toolchain.
     pub build_tags: String,
     /// Packages allowed to sit below the coverage threshold.
@@ -129,6 +130,7 @@ impl Default for Config {
             coverage_json_path: "coverage.json".to_string(),
             cover_profile: String::new(),
             mode: Mode::Ci,
+            mode_set: false,
             build_tags: String::new(),
             coverage_allowlist: Vec::new(),
             coverage_mode: "set".to_string(),
@@ -189,6 +191,12 @@ impl Config {
         self.max_file_lines_set = argv
             .iter()
             .any(|arg| arg == "--max-file-lines" || arg.starts_with("--max-file-lines="));
+        self.mode_set = argv.iter().any(|arg| {
+            arg == "--mode"
+                || arg == "-mode"
+                || arg.starts_with("--mode=")
+                || arg.starts_with("-mode=")
+        });
         if let Err(error) = fs.parse(argv) {
             match &error {
                 // `-h` prints the usage block without a leading error line.
@@ -202,7 +210,6 @@ impl Config {
         }
         self.apply(fs);
         self.validate()?;
-        environment::check(self.mode)?;
         let root = self
             .project_root
             .canonicalize()

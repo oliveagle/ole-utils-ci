@@ -125,14 +125,22 @@ fn tool_gate(
         "",
         rule,
         format!(
-            "{} {} failed{}",
+            "{} {} failed{}\n{}",
             driver.program(),
             subcommand,
-            exit_suffix(result.code)
+            exit_suffix(result.code),
+            tail(&result.output, 20)
         ),
     ));
     report.summary = format!("{name}: {} failed", driver.program());
     Ok(GateResult::failed(name, report.summary.clone(), report))
+}
+
+/// The last lines of a tool's output, so a red gate says why.
+fn tail(output: &str, lines: usize) -> String {
+    let all: Vec<&str> = output.lines().collect();
+    let start = all.len().saturating_sub(lines);
+    all[start..].join("\n")
 }
 
 fn exit_suffix(code: Option<i32>) -> String {

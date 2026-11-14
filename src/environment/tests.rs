@@ -8,30 +8,32 @@ use super::*;
 
 #[test]
 fn a_pinned_mode_has_to_match_the_run() {
-    assert!(check_with(Mode::Ci, Some(Mode::Ci), false, None).is_ok());
-    let error = check_with(Mode::Dev, Some(Mode::Ci), false, None).unwrap_err();
+    assert!(check_with(Mode::Ci, Some(Mode::Ci), false, None, true).is_ok());
+    let error = check_with(Mode::Dev, Some(Mode::Ci), false, None, true).unwrap_err();
     assert!(error.contains("requires --mode ci"), "{error}");
+    // A command line that names no mode is not a contradiction.
+    assert!(check_with(Mode::Ci, Some(Mode::Dev), false, None, false).is_ok());
 }
 
 #[test]
 fn ci_refuses_the_developer_mode_unless_the_pipeline_pinned_it() {
-    let error = check_with(Mode::Dev, None, true, None).unwrap_err();
+    let error = check_with(Mode::Dev, None, true, None, true).unwrap_err();
     assert!(error.contains("CI runs the authoritative gate"), "{error}");
     // A pipeline that declared the developer mode may run it.
-    assert!(check_with(Mode::Dev, Some(Mode::Dev), true, None).is_ok());
+    assert!(check_with(Mode::Dev, Some(Mode::Dev), true, None, true).is_ok());
 }
 
 #[test]
 fn ci_refuses_the_fast_driver() {
-    let error = check_with(Mode::Ci, None, true, Some("blaze".to_string())).unwrap_err();
+    let error = check_with(Mode::Ci, None, true, Some("blaze".to_string()), true).unwrap_err();
     assert!(error.contains("answers with cargo"), "{error}");
-    assert!(check_with(Mode::Ci, None, true, Some("cargo".to_string())).is_ok());
+    assert!(check_with(Mode::Ci, None, true, Some("cargo".to_string()), true).is_ok());
 }
 
 #[test]
 fn a_developer_machine_may_run_either_mode() {
-    assert!(check_with(Mode::Dev, None, false, Some("blaze".to_string())).is_ok());
-    assert!(check_with(Mode::Ci, None, false, Some("blaze".to_string())).is_ok());
+    assert!(check_with(Mode::Dev, None, false, Some("blaze".to_string()), true).is_ok());
+    assert!(check_with(Mode::Ci, None, false, Some("blaze".to_string()), true).is_ok());
 }
 
 #[test]
