@@ -130,6 +130,33 @@ fn the_workflow_states_the_rule_it_enforces() {
     );
 }
 
+#[test]
+fn the_dev_run_takes_its_diff_base_from_the_event() {
+    let text = std::fs::read_to_string(WORKFLOW).expect("the workflow file exists");
+    assert!(
+        text.contains("github.event.pull_request.base.sha") && text.contains("github.event.before"),
+        "the dev run must take its diff base from the event: a fixed `main` is the same commit \
+         as HEAD on a push to main, so every compiling gate would report \"no crate changed\" \
+         and answer from nothing"
+    );
+
+    let mut jobs = jobs();
+    let fast = jobs.remove("fast").expect("the workflow has a `fast` job");
+    let dev = run_commands(&fast)
+        .into_iter()
+        .find(|command| command.contains("--mode dev"))
+        .expect("the `fast` job runs the dev mode");
+    assert!(
+        dev.contains("--base-branch"),
+        "the dev run must name its diff base:\n{dev}"
+    );
+    assert!(
+        dev.contains("steps.base.outputs.base"),
+        "the dev run must take its diff base from the step that resolved it, not a fixed \
+         branch:\n{dev}"
+    );
+}
+
 /// The modes a command asks for, in the order they appear.
 fn modes_in(command: &str) -> Vec<String> {
     let mut modes = Vec::new();

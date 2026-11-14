@@ -32,13 +32,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # The full history, so the diff against `main` can be computed.
+          # The full history, so the diff against the event's base can be
+          # computed.
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
       - name: build
         run: cargo build --all-targets --locked
+      - name: resolve the diff base
+        id: base
+        # `--mode dev` narrows the run to the crates changed since a base, and
+        # a fixed `main` is the same commit as HEAD on a push to main — every
+        # compiling gate would report "no crate changed" and answer from
+        # nothing. Take the base the event names: the pull request's base
+        # commit, else the previous tip of the pushed branch, else the parent
+        # commit. A base git cannot resolve is not dangerous: the tool then
+        # runs everything instead of narrowing.
+        run: |
+          zeros="0000000000000000000000000000000000000000"
+          pr_base="${{ github.event.pull_request.base.sha }}"
+          push_base="${{ github.event.before }}"
+          if [ -n "$pr_base" ] && git cat-file -e "${pr_base}^{commit}" 2>/dev/null; then
+            base="$pr_base"
+          elif [ -n "$push_base" ] && [ "$push_base" != "$zeros" ] \
+            && git cat-file -e "${push_base}^{commit}" 2>/dev/null; then
+            base="$push_base"
+          else
+            base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+          fi
+          echo "diff base: $(git log -1 --format='%h %s' "$base")" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
       - name: the toolchain gates
-        run: ./target/debug/devine-utils-ci rust all --mode dev
+        run: ./target/debug/devine-utils-ci rust all --mode dev --base-branch "${{ steps.base.outputs.base }}"
 
   full:
     name: full (the gate)
