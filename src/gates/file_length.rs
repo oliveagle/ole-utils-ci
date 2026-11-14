@@ -7,6 +7,11 @@
 //! Source and script files are held to 400/500 lines, HTML to 800/1200 and
 //! declarative files (YAML, JSON, CSS, SQL) to 800/1000. A project may lower
 //! a budget but never raise one, and generated files are exempt.
+//!
+//! **A budget is a requirement, not advice.** A file over the budget fails the
+//! gate; the second number is only the point where the report stops suggesting
+//! a split and states that the file has to be split. Nothing here is reported
+//! as a warning that leaves the exit code at zero.
 
 use crate::config::{limits, Config};
 use crate::fsutil;
@@ -68,13 +73,12 @@ pub fn scan(cfg: &Config, qcfg: &QualityConfig) -> Vec<FileLengthViolation> {
             continue;
         }
         let lines = fsutil::count_text_lines(&data);
-        let severity = if lines > limit.max {
-            Severity::Error
-        } else if lines > limit.warn {
-            Severity::Warning
-        } else {
+        if lines <= limit.warn {
             continue;
-        };
+        }
+        // Over the budget is over the budget: both tiers fail the gate, and
+        // the message says which of the two a file broke.
+        let severity = Severity::Error;
         violations.push(FileLengthViolation {
             path: entry.rel,
             lines,
@@ -127,7 +131,7 @@ pub fn run(cfg: &Config) -> Result<GateResult, String> {
             col: 0,
             rule: format!("file-length.{}", v.profile),
             message: format!(
-                "file has {} lines (warn {}, max {})",
+                "file has {} lines (budget {}, cap {})",
                 v.lines, v.warn, v.max
             ),
             detail: String::new(),
@@ -167,7 +171,6 @@ pub fn text_body(result: &GateResult) -> String {
         .iter()
         .filter(|d| d.severity == Severity::Error)
         .count();
-    let warnings = result.report.diagnostics.len() - errors;
     for d in &result.report.diagnostics {
         let mark = if d.severity == Severity::Error {
             "✗"
@@ -178,13 +181,11 @@ pub fn text_body(result: &GateResult) -> String {
     }
     if errors > 0 {
         body.push_str(&format!(
-            "✗ FILE LENGTH VIOLATION: {errors} file(s) exceed their hard limit.\n"
+            "✗ FILE LENGTH VIOLATION: {errors} file(s) exceed their budget — a budget is a requirement.\n"
         ));
-        body.push_str("  Split the file by responsibility; do not raise the source/script cap.\n");
-    } else if warnings > 0 {
-        body.push_str(&format!(
-            "⚠ File length check passed with {warnings} warning(s); reduce these before they reach the hard limit.\n"
-        ));
+        body.push_str(
+            "  Split the file by responsibility; do not raise the source/script budget.\n",
+        );
     } else {
         body.push_str("✅ File length check passed\n");
     }

@@ -64,8 +64,8 @@ const REST: &str = r#"Global Flags:
   --build-tags <tags>            Build tags for go test/vet/build (e.g. test_no_credis)
   --base-branch <name>          Base branch for incremental diff (default: main)
   --max-file-lines <n>          Global cap for type-aware file budgets (default: 500)
-  --max-complexity <n>          Hard cyclomatic-complexity limit (default: 20)
-  --complexity-warn <n>         Complexity warning threshold (default: 15)
+  --max-complexity <n>          Cyclomatic-complexity cap (default: 20)
+  --complexity-warn <n>         Cyclomatic-complexity budget; over it fails (default: 15)
   --verbose, -v                 Verbose output
   --junit <path>                JUnit XML output path (test-report)
   --coverage-html <path>        Coverage HTML report path (coverage)

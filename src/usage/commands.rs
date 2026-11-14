@@ -64,7 +64,7 @@ pub const COMMANDS: &str = r#"Commands:
   buf-breaking         Check for breaking proto changes
   buf-generate         Generate code from proto files
   file-length          Check type-aware source/template/config file budgets
-                       (warn + hard limits; --max-file-lines is a global lower cap)
+                       (budget + cap, both fail; --max-file-lines is a global lower cap)
   complexity           Cyclomatic complexity for Go/Tengo/TS/JS
                        (warn default 15, hard max default 20)
   package-size         Warning-only Go package growth budgets

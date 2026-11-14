@@ -4,8 +4,9 @@
 
 //! The `complexity` gate: function-level cyclomatic complexity.
 //!
-//! Warnings are advisory; only the hard maximum fails the check. Rust is
-//! covered alongside Go, Tengo, TypeScript and JavaScript.
+//! **A budget is a requirement, not advice.** A function over the budget fails
+//! the gate rather than producing a warning that leaves the exit code at zero.
+//! Rust is covered alongside Go, Tengo, TypeScript and JavaScript.
 
 pub mod lang;
 pub mod scanners;
@@ -87,11 +88,10 @@ pub fn scan(root: &std::path::Path, thresholds: Thresholds) -> (usize, Vec<Compl
     (total, violations)
 }
 
+/// A function over the budget is a failure, whichever tier it broke.
 fn severity_for(value: usize, thresholds: Thresholds) -> Option<Severity> {
-    if value > thresholds.max {
+    if value > thresholds.warn {
         Some(Severity::Error)
-    } else if value > thresholds.warn {
-        Some(Severity::Warning)
     } else {
         None
     }
@@ -130,7 +130,7 @@ pub fn run(cfg: &Config) -> Result<GateResult, String> {
             v.metric.path.clone(),
             format!("complexity.{}", v.metric.language),
             format!(
-                "{} has complexity {} (warn {}, max {})",
+                "{} has complexity {} (budget {}, cap {})",
                 v.metric.function, v.metric.complexity, thresholds.warn, thresholds.max
             ),
         )
@@ -189,7 +189,7 @@ pub fn validate_config(qcfg: &QualityConfig) -> Result<(), String> {
 /// The human-readable body printed when `--output` is not set.
 pub fn text_body(result: &GateResult, total: usize, thresholds: Thresholds) -> String {
     let mut body = format!(
-        "🌀 Checking cyclomatic complexity (warn: {}, max: {})...\n",
+        "🌀 Checking cyclomatic complexity (budget: {}, cap: {})...\n",
         thresholds.warn, thresholds.max
     );
     let errors = result
@@ -198,7 +198,6 @@ pub fn text_body(result: &GateResult, total: usize, thresholds: Thresholds) -> S
         .iter()
         .filter(|d| d.severity == Severity::Error)
         .count();
-    let warnings = result.report.diagnostics.len() - errors;
     for d in &result.report.diagnostics {
         let mark = if d.severity == Severity::Error {
             "✗"
@@ -209,23 +208,15 @@ pub fn text_body(result: &GateResult, total: usize, thresholds: Thresholds) -> S
     }
     if errors > 0 {
         body.push_str(&format!(
-            "✗ COMPLEXITY VIOLATION: {errors} function(s) exceed max {}.\n",
-            thresholds.max
+            "✗ COMPLEXITY VIOLATION: {errors} function(s) exceed the budget of {} — a budget is a requirement.\n",
+            thresholds.warn
         ));
         body.push_str("  Extract helpers, reduce nesting, or simplify boolean conditions.\n");
     } else {
-        body.push_str(&format!("  Checked {total} functions"));
-        if warnings > 0 {
-            body.push_str(&format!(
-                "; {warnings} warning(s), all within hard max {}\n",
-                thresholds.max
-            ));
-        } else {
-            body.push_str(&format!(
-                ", all within warning threshold {}\n",
-                thresholds.warn
-            ));
-        }
+        body.push_str(&format!(
+            "  Checked {total} functions, all within the budget of {}\n",
+            thresholds.warn
+        ));
         body.push_str("✅ Complexity check passed\n");
     }
     body
@@ -234,6 +225,27 @@ pub fn text_body(result: &GateResult, total: usize, thresholds: Thresholds) -> S
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_function_over_its_budget_is_an_error_not_a_warning() {
+        // 18 sits inside the 15/20 band: once a warning, now a failure.
+        let thresholds = Thresholds { warn: 15, max: 20 };
+        assert_eq!(
+            severity_for(18, thresholds),
+            Some(Severity::Error),
+            "over budget must fail the gate, not warn about it"
+        );
+        assert_eq!(
+            severity_for(15, thresholds),
+            None,
+            "the budget itself passes"
+        );
+        assert_eq!(
+            severity_for(21, thresholds),
+            Some(Severity::Error),
+            "over the cap still fails"
+        );
+    }
 
     #[test]
     fn counts_decision_points() {

@@ -191,8 +191,8 @@ never replaced without `--force` and never deleted at all.
 | `sanity` | Trailing whitespace, conflict markers, missing final newlines. |
 | `license` | Every source file must carry a licence header. |
 | `structure` | Repository root layout and build-artifact hygiene. |
-| `file-length` | Type-aware line budgets (source/script/html/declarative). |
-| `complexity` | Cyclomatic complexity per function. |
+| `file-length` | Type-aware line budgets (source/script/html/declarative). A file over its budget fails the gate. |
+| `complexity` | Cyclomatic complexity per function. A function over its budget fails the gate. |
 | `package-size` | Warning-only package growth budgets. |
 | `artifact-size` | Release-artifact size budgets. |
 | `go-pin` | Go toolchain pin drift. |
@@ -391,8 +391,8 @@ unknown flag, and `1` for an unknown subcommand.
 | `--coverage-allowlist <pkg,…>` | (empty) | Packages allowed to sit below the threshold. |
 | `--covermode <set\|atomic\|count>` | `set` | `go test -covermode` value. |
 | `--max-file-lines <n>` | `500` | Source-file line ceiling. |
-| `--complexity-warn <n>` | `15` | Complexity warning threshold. |
-| `--max-complexity <n>` | `20` | Complexity hard ceiling. |
+| `--complexity-warn <n>` | `15` | Complexity budget. Over it the gate fails — it is not a warning. |
+| `--max-complexity <n>` | `20` | Complexity cap. Also fails; it only changes how the report words it. |
 | `--build-tags <tags>` | (empty) | Build tags for the Go toolchain. |
 | `--parallel <n>` | `0` | `go test -parallel N`; `0` means `GOMAXPROCS`. |
 | `--junit <path>` | `junit.xml` | JUnit XML output path. |
@@ -500,8 +500,9 @@ The repository dogfoods the tool: `make gate` runs every gate against this
 repository and must stay green — including `ci-go-env`, which scans the tree
 for likely credentials. In particular the source budget is 300/450 lines and
 the complexity budget is 12/18 (see `.devine-utils-ci.jsonc`), both tighter
-than the built-in defaults; the tree currently sits inside both warning
-thresholds, so a `make gate` run reports no warnings at all.
+than the built-in defaults; the tree currently sits inside both budgets, so a
+`make gate` run has nothing to report. A budget is a requirement: breaking one
+fails the gate instead of adding a warning to a green run.
 
 `scripts/blaze.sh` wraps `blaze` and restarts its daemon with
 `BLAZE_SANDBOX=off`, because container images that block
