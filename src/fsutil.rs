@@ -40,8 +40,8 @@ pub fn should_skip_dir(name: &str) -> bool {
 
 /// Go's `filepath.Join(root, rel)`: concatenate with `/`, then `Clean`.
 ///
-/// Unlike [`PathBuf::join`], a later absolute element does not reset the
-/// result — Go's `Join` only cleans the joined string, so
+/// Unlike [`Path::join`](std::path::Path::join), a later absolute element
+/// does not reset the result — Go's `Join` only cleans the joined string, so
 /// `Join("/root", "/tmp/x.xml")` is `/root/tmp/x.xml`.
 pub fn go_join(root: &Path, rel: &str) -> PathBuf {
     let mut joined = root.to_string_lossy().to_string();

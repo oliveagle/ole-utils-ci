@@ -59,7 +59,9 @@ pub fn global_flag_set(cfg: &Config) -> FlagSet {
 /// Parses the global flags and returns the leftover positional arguments.
 pub fn parse_global(cfg: &mut Config, args: &[String]) -> Result<Vec<String>, String> {
     let mut fs = global_flag_set(cfg);
-    cfg.parse(&mut fs, args)
+    let rest = cfg.parse(&mut fs, args)?;
+    crate::environment::check(cfg.mode, cfg.mode_set)?;
+    Ok(rest)
 }
 
 /// The exit code a command returns.

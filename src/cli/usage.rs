@@ -43,7 +43,7 @@ pub const GLOBAL_USAGE: &str = r#"Usage of devine-utils-ci:
   -max-file-lines int
     	源码/脚本文件硬上限 (默认: 500, 只能降低不可提高; 是 HTML/声明式 profile 的可选全局上限) (default 500)
   -mode string
-    	质量门禁模式: dev (增量) / release (全量) (default "release")
+    	环境: dev (只跑改动的 crate, 快速驱动, 略过 rustdoc/audit/coverage) / ci (全量, 权威判定); release 是 ci 的旧名 (default "ci")
   -n	dry-run 模式 (shorthand)
   -o string
     	--output 的缩写

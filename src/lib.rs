@@ -13,6 +13,7 @@ pub mod cli;
 pub mod commands;
 pub mod config;
 pub mod dispatch;
+pub mod environment;
 pub mod fsutil;
 pub mod gates;
 pub mod git;

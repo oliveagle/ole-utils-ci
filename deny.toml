@@ -1,0 +1,49 @@
+# The dependency policy of this repository, checked by `cargo deny`.
+#
+# `devine-utils-ci rust-audit` runs `cargo deny check` against this file, so
+# the policy is part of the gate and not a document that can drift away from
+# it.
+
+[graph]
+all-features = true
+
+[licenses]
+# The permissive set a Rust binary may ship under. Every crate in the tree
+# offers one of these; `cargo deny` rejects anything else.
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.8
+
+[bans]
+# A second copy of a crate is a warning, not an error: the tree carries a few
+# because two of its dependencies want different versions.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[advisories]
+# Every advisory below is an *unmaintained* notice, not a vulnerability: the
+# crate works, nobody patches it any more. They are listed one by one, with
+# the reason, so that a new one still fails the gate.
+ignore = [
+    { id = "RUSTSEC-2024-0320", reason = "yaml-rust is unmaintained; it arrives through toon-format -> syntect, which parses the syntax highlighting of the source we read" },
+    { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained; it arrives through toon-format -> ratatui, the terminal renderer of the TOON output" },
+    { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml is unmaintained; it arrives through serde_yaml, which reads the YAML configuration files" },
+    { id = "RUSTSEC-2025-0141", reason = "bincode is unmaintained; it arrives through toon-format -> syntect" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
