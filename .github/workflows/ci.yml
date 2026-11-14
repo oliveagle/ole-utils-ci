@@ -1,0 +1,59 @@
+# The two CI pipelines of this repository.
+#
+# Every job writes down the mode it runs in and pins it in the environment:
+#
+#   DEVINE_UTILS_REQUIRE_MODE=ci   the authoritative job; nothing lowers it
+#   DEVINE_UTILS_REQUIRE_MODE=dev  the fast job; a smoke test, not a verdict
+#
+# The tool enforces the pin: a job that asks for another mode is refused, and
+# inside CI the fast build driver is refused as well, so no job can answer
+# from a cache that leaves a test or a lint out.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fast:
+    name: fast (smoke test)
+    runs-on: ubuntu-latest
+    env:
+      # Declared on purpose: this job is the developer's loop. It is quick
+      # because it runs the changed crates and leaves the slow gates out, and
+      # it is not the verdict — the `full` job is.
+      DEVINE_UTILS_REQUIRE_MODE: dev
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The full history, so the diff against `main` can be computed.
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: build
+        run: cargo build --all-targets --locked
+      - name: the toolchain gates
+        run: ./target/debug/devine-utils-ci rust all --mode dev
+
+  full:
+    name: full (the gate)
+    runs-on: ubuntu-latest
+    env:
+      # The authoritative job. The mode cannot be lowered in this job.
+      DEVINE_UTILS_REQUIRE_MODE: ci
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: build
+        run: cargo build --all-targets --locked
+      - name: every gate
+        run: ./target/debug/devine-utils-ci all --mode ci
+      - name: credential scan
+        run: ./target/debug/devine-utils-ci ci-go-env
