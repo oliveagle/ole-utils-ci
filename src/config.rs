@@ -12,6 +12,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::cli::{FlagSet, ParseError, GLOBAL_USAGE};
+use crate::environment;
 use crate::output;
 
 /// Hard quality budgets owned by the tool, not by project configuration.
@@ -22,13 +23,21 @@ pub mod limits;
 /// The "thresholds may only be tightened" validation.
 pub mod validate;
 
-/// Quality-gate mode.
+/// Quality-gate environment.
+///
+/// The two environments answer the two questions a repository asks of a gate:
+/// `dev` is the loop a developer runs after every save and must be quick, so
+/// it scopes the toolchain gates to the crates the branch touched (under
+/// cargo; blaze narrows with its own cache) and lets the fast build driver
+/// answer; `ci` is the judge and must see everything, so it
+/// runs the whole workspace through plain `cargo`. A `dev` run never replaces
+/// a `ci` run: it prints the gates it skipped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
-    /// Only the packages changed since `--base-branch`.
+    /// Fast and incremental: changed crates only, fast driver, slow gates off.
     Dev,
-    /// The whole repository.
-    Release,
+    /// Full and authoritative: the whole workspace, every gate.
+    Ci,
 }
 
 impl Mode {
@@ -36,8 +45,25 @@ impl Mode {
     pub fn as_str(self) -> &'static str {
         match self {
             Mode::Dev => "dev",
-            Mode::Release => "release",
+            Mode::Ci => "ci",
         }
+    }
+
+    /// Reads a `--mode` value.
+    ///
+    /// `release` is the name this flag carried before the environment split
+    /// and still selects the full run; anything unrecognised does the same,
+    /// because a typo must not silently buy a weaker gate.
+    pub fn parse(value: &str) -> Mode {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "dev" => Mode::Dev,
+            _ => Mode::Ci,
+        }
+    }
+
+    /// Whether this is the fast, incremental environment.
+    pub fn is_dev(self) -> bool {
+        self == Mode::Dev
     }
 }
 
@@ -62,7 +88,7 @@ pub struct Config {
     pub coverage_json_path: String,
     /// Path of an existing coverprofile to reuse instead of running the tests.
     pub cover_profile: String,
-    /// `dev` or `release`.
+    /// The environment this run belongs to
     pub mode: Mode,
     /// Build tags passed through to the Go toolchain.
     pub build_tags: String,
@@ -102,7 +128,7 @@ impl Default for Config {
             coverage_html_path: "coverage.html".to_string(),
             coverage_json_path: "coverage.json".to_string(),
             cover_profile: String::new(),
-            mode: Mode::Release,
+            mode: Mode::Ci,
             build_tags: String::new(),
             coverage_allowlist: Vec::new(),
             coverage_mode: "set".to_string(),
@@ -176,6 +202,7 @@ impl Config {
         }
         self.apply(fs);
         self.validate()?;
+        environment::check(self.mode)?;
         let root = self
             .project_root
             .canonicalize()
@@ -208,10 +235,7 @@ impl Config {
         self.coverage_html_path = get_str("coverage-html", "coverage.html");
         self.coverage_json_path = get_str("coverage-json", "coverage.json");
         self.cover_profile = get_str("coverage-profile", "");
-        self.mode = match get_str("mode", "release").as_str() {
-            "dev" => Mode::Dev,
-            _ => Mode::Release,
-        };
+        self.mode = Mode::parse(&get_str("mode", "ci"));
         self.build_tags = get_str("build-tags", "");
         self.coverage_allowlist = fs
             .get("coverage-allowlist")
@@ -229,6 +253,11 @@ impl Config {
         self.include_generated = get_bool("include-generated", false);
         self.release_model = get_str("release-model", "simple");
         self.output = get_str("output", "");
+    }
+
+    /// Whether this run is the fast, incremental environment.
+    pub fn is_dev(&self) -> bool {
+        self.mode.is_dev()
     }
 
     /// The output format the caller asked for.

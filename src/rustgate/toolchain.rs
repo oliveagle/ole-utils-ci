@@ -18,6 +18,7 @@ use std::process::Stdio;
 use std::sync::OnceLock;
 use std::time::Duration;
 
+use crate::config::Mode;
 use crate::runner::Runner;
 
 /// Wall-clock budget for one cargo/blaze invocation.
@@ -45,15 +46,26 @@ impl Driver {
     }
 }
 
-/// Picks the build driver to use for `root`.
-///
-/// `blaze` wins when it is installed, unless `DEVINE_UTILS_RUST_DRIVER` says
-/// otherwise. The environment variable accepts `cargo` or `blaze`.
+/// Picks the build driver for the full, authoritative environment.
 pub fn detect_driver(root: &Path) -> Driver {
+    detect_driver_for(root, Mode::Ci)
+}
+
+/// Picks the build driver to use for `root` in `mode`.
+///
+/// `DEVINE_UTILS_RUST_DRIVER` always wins and accepts `cargo` or `blaze`.
+/// Otherwise the environment decides: `ci` runs plain cargo, because a fast
+/// driver that answers from its own cache can leave a test or a lint out and
+/// make a red build look green; `dev` takes `blaze` when it is installed
+/// beside cargo, since being quick is the whole point of that loop.
+pub fn detect_driver_for(root: &Path, mode: Mode) -> Driver {
     match std::env::var("DEVINE_UTILS_RUST_DRIVER").as_deref() {
         Ok("cargo") => return Driver::Cargo,
         Ok("blaze") => return Driver::Blaze,
         _ => {}
+    }
+    if !mode.is_dev() {
+        return Driver::Cargo;
     }
     if !Runner::command_exists("blaze") {
         return Driver::Cargo;
@@ -90,15 +102,20 @@ pub fn adapt_args<'a>(driver: Driver, subcommand: &'a str, args: &'a [&'a str]) 
     match driver {
         Driver::Cargo => args.to_vec(),
         Driver::Blaze => match subcommand {
-            "build" | "test" => args
-                .iter()
-                .copied()
-                .filter(|arg| *arg != "--all-targets")
-                .collect(),
+            "build" | "test" => without(args, &["--all-targets", "--workspace"]),
+            "clippy" => without(args, &["--workspace"]),
             "doc" => Vec::new(),
             _ => args.to_vec(),
         },
     }
+}
+
+/// `args` without the flags the driver does not take.
+fn without<'a>(args: &'a [&'a str], dropped: &[&str]) -> Vec<&'a str> {
+    args.iter()
+        .copied()
+        .filter(|arg| !dropped.contains(arg))
+        .collect()
 }
 
 /// The complete command line for one invocation.

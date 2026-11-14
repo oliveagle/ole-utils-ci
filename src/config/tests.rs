@@ -22,11 +22,35 @@ fn parse(args: &[&str]) -> Result<(Config, Vec<String>), String> {
 fn defaults_match_the_go_tool() {
     let (cfg, _) = parse(&[]).unwrap();
     assert_eq!(cfg.coverage_threshold, 80);
-    assert_eq!(cfg.mode, Mode::Release);
+    assert_eq!(cfg.mode, Mode::Ci);
     assert_eq!(cfg.max_file_lines, 500);
     assert_eq!(cfg.max_complexity, 20);
     assert_eq!(cfg.complexity_warn, 15);
     assert_eq!(cfg.junit_path, "junit.xml");
+}
+
+#[test]
+fn the_default_environment_is_the_full_one() {
+    let (cfg, _) = parse(&[]).unwrap();
+    assert_eq!(cfg.mode, Mode::Ci);
+    assert!(!cfg.is_dev());
+}
+
+#[test]
+fn the_environment_flag_selects_dev() {
+    let (cfg, _) = parse(&["--mode", "dev"]).unwrap();
+    assert_eq!(cfg.mode, Mode::Dev);
+    assert!(cfg.is_dev());
+}
+
+#[test]
+fn release_is_still_the_name_of_the_full_run() {
+    assert_eq!(Mode::parse("release"), Mode::Ci);
+    assert_eq!(Mode::parse("  DEV "), Mode::Dev);
+    assert_eq!(Mode::parse("ci"), Mode::Ci);
+    // A typo must not buy the weaker run.
+    assert_eq!(Mode::parse("dve"), Mode::Ci);
+    assert_eq!(Mode::parse(""), Mode::Ci);
 }
 
 #[test]

@@ -18,3 +18,23 @@ fn lists_every_rust_gate() {
     assert_eq!(GATES.len(), 10);
     assert!(GATES.contains(&"rust-clippy"));
 }
+
+#[test]
+fn dev_leaves_out_only_the_slow_gates() {
+    assert!(skipped_in_dev("rust-doc").is_some());
+    assert!(skipped_in_dev("rust-audit").is_some());
+    assert!(skipped_in_dev("rust-test").is_none());
+    assert!(skipped_in_dev("rust-clippy").is_none());
+}
+
+#[test]
+fn a_skipped_gate_says_so_instead_of_looking_like_a_pass() {
+    let mut cfg = Config::new();
+    cfg.mode = crate::config::Mode::Dev;
+    let result = skipped(&cfg, "rust-doc", "ci runs it");
+    assert!(result.passed());
+    assert_eq!(result.report.summary, "skipped — ci runs it");
+    let extra = result.report.extra.expect("extra");
+    assert_eq!(extra["skipped"], serde_json::json!(true));
+    assert_eq!(extra["mode"], serde_json::json!("dev"));
+}

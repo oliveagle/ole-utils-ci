@@ -55,7 +55,12 @@ const REST: &str = r#"Global Flags:
   --project-root <path>         Project root directory (default: current dir)
   --coverage-threshold <n>      Coverage threshold percentage (default: 80)
   --coverage-allowlist <pkg,...> Packages allowed below coverage threshold
-  --mode <dev|release>          Quality gate mode (default: release)
+  --mode <dev|ci>               Environment (default: ci)
+                                  dev  changed crates only under cargo, blaze's
+                                       own cache under blaze (it reads -p as a
+                                       test filter), rustdoc/audit/coverage
+                                       skipped
+                                  ci   whole workspace, every gate
   --build-tags <tags>            Build tags for go test/vet/build (e.g. test_no_credis)
   --base-branch <name>          Base branch for incremental diff (default: main)
   --max-file-lines <n>          Global cap for type-aware file budgets (default: 500)
@@ -78,7 +83,8 @@ Output modes (per-subcommand; see AGENTS.md §9):
 Examples:
   devine-utils-ci all                                              # Run all checks
   devine-utils-ci lint                                             # Run linters only
-  devine-utils-ci all --mode dev --base-branch main                # Incremental mode
+  devine-utils-ci all --mode dev --base-branch main                # Fast local loop
+  devine-utils-ci all --mode ci                                     # Full run (CI)
   devine-utils-ci all --build-tags test_no_credis                  # With build tags
   devine-utils-ci coverage --coverage-threshold 85                 # Custom threshold
   devine-utils-ci coverage --coverage-allowlist pkg/foo,pkg/bar    # With allowlist

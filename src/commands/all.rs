@@ -63,28 +63,17 @@ pub fn steps(cfg: &Config) -> Vec<Step> {
             required: true,
         }]
     } else {
-        vec![
-            Step {
-                name: "install",
+        let mut names = vec!["install", "lint", "test", "build"];
+        if !cfg.is_dev() {
+            names.push("coverage");
+        }
+        names
+            .into_iter()
+            .map(|name| Step {
+                name,
                 required: true,
-            },
-            Step {
-                name: "lint",
-                required: true,
-            },
-            Step {
-                name: "test",
-                required: true,
-            },
-            Step {
-                name: "build",
-                required: true,
-            },
-            Step {
-                name: "coverage",
-                required: true,
-            },
-        ]
+            })
+            .collect()
     };
     steps.extend(static_steps());
     steps
@@ -97,6 +86,7 @@ fn is_rust_project(cfg: &Config) -> bool {
 
 /// Runs the aggregate gate and returns the exit code.
 pub fn run(cfg: &Config) -> Result<i32, String> {
+    announce(cfg);
     let mut failures: Vec<String> = Vec::new();
     for step in steps(cfg) {
         println!("── {} ──", step.name);
@@ -124,6 +114,37 @@ pub fn run(cfg: &Config) -> Result<i32, String> {
         Ok(0)
     } else {
         Err(format!("quality gate failed: {}", failures.join(", ")))
+    }
+}
+
+/// Says which environment this run belongs to, and what it therefore leaves
+/// out.
+///
+/// The warning is the point: a `dev` run is quick because it is narrower, and
+/// a narrower run must never be mistaken for the verdict `ci` gives.
+fn announce(cfg: &Config) {
+    if !cfg.is_dev() {
+        println!(
+            "🔒 ci environment — whole workspace, cargo, every gate{}",
+            if crate::environment::in_ci() {
+                " (CI detected: the mode cannot be lowered here)"
+            } else {
+                ""
+            }
+        );
+        return;
+    }
+    println!(
+        "⚡ dev environment — changed crates only (since {}), fast build driver, \
+         coverage and rustdoc/audit skipped",
+        cfg.base_branch
+    );
+    println!("   This is a smoke test; run the same command with --mode ci before releasing.");
+    if crate::environment::in_ci() {
+        println!(
+            "   ⚠ CI job: this job declared the developer's mode, so it is a smoke \
+             test, not the verdict — the `full` job is the gate."
+        );
     }
 }
 

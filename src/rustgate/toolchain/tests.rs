@@ -81,3 +81,34 @@ fn only_namespace_errors_count_as_sandbox_failures() {
         "error: could not compile `x` due to 1 error"
     ));
 }
+
+#[test]
+fn the_full_environment_never_takes_the_fast_driver() {
+    // `ci` is the judge: unless the caller forces a driver, it runs cargo.
+    if std::env::var("DEVINE_UTILS_RUST_DRIVER").is_err() {
+        assert_eq!(
+            detect_driver_for(Path::new("/nonexistent-root-for-tests"), Mode::Ci),
+            Driver::Cargo
+        );
+    }
+}
+
+#[test]
+fn blaze_drops_the_flags_it_does_not_take() {
+    assert_eq!(
+        adapt_args(Driver::Blaze, "test", &["--workspace", "--all-targets"]),
+        Vec::<&str>::new()
+    );
+    assert_eq!(
+        adapt_args(
+            Driver::Blaze,
+            "clippy",
+            &["--workspace", "--", "-D", "warnings"]
+        ),
+        vec!["--", "-D", "warnings"]
+    );
+    assert_eq!(
+        adapt_args(Driver::Cargo, "test", &["--workspace"]),
+        vec!["--workspace"]
+    );
+}
