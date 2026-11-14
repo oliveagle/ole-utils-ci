@@ -30,8 +30,10 @@ fn a_file_over_its_budget_is_an_error_not_a_warning() {
     // warning and leave the exit code at zero; a budget is a requirement now.
     let dir = tempfile::tempdir().expect("temp dir");
     std::fs::write(dir.path().join("big.rs"), "fn f() {}\n".repeat(420)).expect("write");
-    let mut cfg = Config::default();
-    cfg.project_root = dir.path().to_path_buf();
+    let cfg = Config {
+        project_root: dir.path().to_path_buf(),
+        ..Config::default()
+    };
 
     let violations = scan(&cfg, &QualityConfig::default());
     assert_eq!(violations.len(), 1, "the file is over the 400-line budget");

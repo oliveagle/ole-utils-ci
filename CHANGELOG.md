@@ -1,3 +1,19 @@
+## [0.15.0] — 2026-11-14
+
+### Changed
+
+- **A budget is a requirement, not a warning.** `file-length` and `complexity`
+  reported a warning between their two numbers and left the exit code at zero,
+  so a green run could carry a 420-line source file or a function of complexity
+  19 and the verdict never said so. Both gates now fail on any breach: the
+  budget (400 lines for source, 800 for HTML and declarative files, complexity
+  15) is where the run stops, and the cap above it (500 / 1200 / 1000,
+  complexity 20) only changes how the report words it. `package-size` and
+  `artifact-size` stay advisory, because they measure growth, not shape.
+  Breaking for a project that sat inside the old warning band — that run is
+  red now, and the fix is to split the file or extract a helper instead of
+  reading past a warning.
+
 ## [0.14.0] — 2026-11-14
 
 ### Changed
