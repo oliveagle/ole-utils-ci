@@ -5,7 +5,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.12.0] — 2026-11-14
 
 ### Added
 
@@ -37,6 +37,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A group runs nothing until you name a command: on its own it prints the
   commands it has and exits with status 1. `all` runs every gate of the
   group, in order, and stops at the first failure, the way `all` does.
+
+### Fixed
+
+- `bump-version` now writes the new version into this package's entry in
+  `Cargo.lock` as well as `VERSION` and `Cargo.toml`. Every build path in this
+  repository passes `--locked`, so a bump that left the lock behind produced a
+  commit that could not be built.
 
 
 ## [0.11.7] — 2026-11-11

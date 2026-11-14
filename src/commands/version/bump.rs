@@ -56,6 +56,10 @@ pub fn bump_version(cfg: &Config, bump: &str) -> Result<i32, String> {
         println!("  ✓ Cargo.toml synced to {next_text}");
         managed.push("Cargo.toml".to_string());
     }
+    if cargo::write_lock_version(root, &next_text)? {
+        println!("  ✓ Cargo.lock synced to {next_text}");
+        managed.push("Cargo.lock".to_string());
+    }
     if sync_legacy_go_const(root, &next_text, true)? {
         managed.push("pkg/version/version.go".to_string());
     }
