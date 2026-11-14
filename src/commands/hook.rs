@@ -15,6 +15,7 @@
 //! The command also installs the shims that call it, so a clone becomes
 //! guarded with one `devine-utils-ci hook install`.
 
+mod args;
 mod commit;
 mod install;
 mod message;

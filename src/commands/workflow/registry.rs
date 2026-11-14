@@ -137,7 +137,7 @@ pub fn merge_file_into(reg: &mut Registry, path: &Path) -> Result<bool, String> 
     if String::from_utf8_lossy(&data).trim().is_empty() {
         return Ok(true);
     }
-    let file: WorkflowFile = serde_yaml::from_slice(&data)
+    let file: WorkflowFile = serde_norway::from_slice(&data)
         .map_err(|error| format!("parse workflow config {display}: {error}"))?;
     for (name, entry) in file.workflows {
         let Some(entry) = entry else { continue };

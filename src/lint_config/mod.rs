@@ -112,7 +112,7 @@ pub fn load(root: &Path) -> Result<ProjectConfig, String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(ProjectConfig::default()),
         Err(e) => return Err(format!("read {PROJECT_CONFIG_FILE}: {e}")),
     };
-    serde_yaml::from_str(&data).map_err(|e| format!("parse {PROJECT_CONFIG_FILE}: {e}"))
+    serde_norway::from_str(&data).map_err(|e| format!("parse {PROJECT_CONFIG_FILE}: {e}"))
 }
 
 /// Applies the defaults the Go original applies to one project.

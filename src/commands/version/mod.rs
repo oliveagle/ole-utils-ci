@@ -82,8 +82,8 @@ pub fn gather(cfg: &Config) -> Result<VersionState, String> {
 
 /// The `release-check` command: the pre-release gate.
 ///
-/// The whole check lives in [`releasecheck`], which follows the Go
-/// original's order and stops at the first broken invariant.
+/// The whole check lives in the `releasecheck` module, which follows
+/// the Go original's order and stops at the first broken invariant.
 pub fn release_check(cfg: &Config) -> Result<i32, String> {
     releasecheck::run(cfg)
 }

@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn watch_defaults_survive_a_sparse_config() {
-        let config: WatchConfig = serde_yaml::from_str("repos:\n  - group: devine\n").unwrap();
+        let config: WatchConfig = serde_norway::from_str("repos:\n  - group: devine\n").unwrap();
         let mut config = config;
         config.apply_defaults();
         assert_eq!(config.base_url, DEFAULT_BASE_URL);
@@ -195,11 +195,11 @@ mod tests {
     #[test]
     fn watch_interval_is_clamped_into_the_documented_window() {
         let mut config: WatchConfig =
-            serde_yaml::from_str("refresh:\n  interval_seconds: 1\n").unwrap();
+            serde_norway::from_str("refresh:\n  interval_seconds: 1\n").unwrap();
         config.apply_defaults();
         assert_eq!(config.refresh.interval_seconds, 5);
         let mut config: WatchConfig =
-            serde_yaml::from_str("refresh:\n  interval_seconds: 999\n").unwrap();
+            serde_norway::from_str("refresh:\n  interval_seconds: 999\n").unwrap();
         config.apply_defaults();
         assert_eq!(config.refresh.interval_seconds, 120);
     }

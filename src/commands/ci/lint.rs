@@ -13,7 +13,7 @@
 
 use std::path::Path;
 
-use serde_yaml::Value;
+use serde_norway::Value;
 
 use crate::config::Config;
 use crate::output::{Diagnostic, Report};
@@ -35,7 +35,7 @@ pub fn ci_lint_file(cfg: &Config, relative: &Path) -> Result<i32, String> {
         return Err(format!("{display} not found in {}", cfg.root().display()));
     };
     let mut report = Report::new("ci-lint");
-    let parsed = match serde_yaml::from_str::<Value>(&raw) {
+    let parsed = match serde_norway::from_str::<Value>(&raw) {
         Ok(parsed) => parsed,
         Err(error) => {
             report.add(Diagnostic::error(

@@ -508,10 +508,12 @@ thresholds, so a `make gate` run reports no warnings at all.
 `unshare(CLONE_NEWUSER)` otherwise fail every build with
 `/proc/self/setgroups: Permission denied`.
 
-`deny.toml` is the dependency policy: the licences the tree may ship under
-and the advisories that are ignored, each with its reason. The `rust-audit`
-gate runs `cargo deny check` against it, so the policy is part of the gate
-rather than a document that drifts away from it.
+`deny.toml` is the dependency policy: the licences the tree may ship under,
+the crates that are allowed to appear twice, and the advisories that are
+ignored — each with its reason. The `rust-audit` gate runs `cargo deny check`
+against it, so the policy is part of the gate rather than a document that
+drifts away from it. The advisory list is empty: every crate the binary ships
+is maintained.
 
 
 ## Licence

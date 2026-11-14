@@ -6,6 +6,12 @@
 
 [graph]
 all-features = true
+# The tree is audited for the platform this repository builds and releases:
+# linux-x86_64, the same platform CI and the release artifacts use. The
+# crates that exist only for other targets (the `windows-*` family and
+# `wasm-bindgen`) would otherwise drag in a second `syn` that is never
+# compiled here.
+targets = ["x86_64-unknown-linux-gnu"]
 
 [licenses]
 # The permissive set a Rust binary may ship under. Every crate in the tree
@@ -25,23 +31,27 @@ allow = [
     "Zlib",
 ]
 confidence-threshold = 0.8
+# An allow-list entry that no crate offers today is not a problem: the list
+# is the set of licenses this project accepts, not a report of the tree.
+unused-allowed-license = "allow"
 
 [bans]
-# A second copy of a crate is a warning, not an error: the tree carries a few
-# because two of its dependencies want different versions.
-multiple-versions = "warn"
+# A second copy of a crate in one build is a mistake, not a warning.
+multiple-versions = "deny"
 wildcards = "deny"
+skip = [
+    # `toml` 0.9 depends on winnow 0.7 directly and on winnow 1.0 through
+    # its own `toml_parser`. Both versions are upstream's choice; our own
+    # code touches neither of them.
+    { crate = "winnow", reason = "toml 0.9 pulls in winnow 0.7 directly and winnow 1.0 through toml_parser" },
+]
 
 [advisories]
-# Every advisory below is an *unmaintained* notice, not a vulnerability: the
-# crate works, nobody patches it any more. They are listed one by one, with
-# the reason, so that a new one still fails the gate.
-ignore = [
-    { id = "RUSTSEC-2024-0320", reason = "yaml-rust is unmaintained; it arrives through toon-format -> syntect, which parses the syntax highlighting of the source we read" },
-    { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained; it arrives through toon-format -> ratatui, the terminal renderer of the TOON output" },
-    { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml is unmaintained; it arrives through serde_yaml, which reads the YAML configuration files" },
-    { id = "RUSTSEC-2025-0141", reason = "bincode is unmaintained; it arrives through toon-format -> syntect" },
-]
+# No advisory is ignored, and none has to be: the four notices this file
+# used to list came from the terminal half of `toon-format` (syntect,
+# ratatui) and from `serde_yaml` (unsafe-libyaml). That tree is gone, so
+# every crate the binary ships is maintained.
+ignore = []
 
 [sources]
 unknown-registry = "deny"

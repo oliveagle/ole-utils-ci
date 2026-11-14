@@ -11,7 +11,8 @@
 //! The standalone command is one of the *focused* lint gates: it owns a
 //! private flag set, defaults to TOON output, exits 2 when the command line
 //! is refused and 1 when the pin has drifted. The per-surface checks live in
-//! [`surfaces`], because each one reads one file and asks one question.
+//! the `surfaces` module, because each one reads one file and asks one
+//! question.
 
 use std::path::Path;
 

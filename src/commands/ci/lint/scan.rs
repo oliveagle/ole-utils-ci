@@ -4,7 +4,7 @@
 
 //! The text and job-shape scanners behind `ci-lint`.
 
-use serde_yaml::Value;
+use serde_norway::Value;
 
 /// Top-level keys that are not job definitions.
 const NOT_A_JOB: [&str; 9] = [
@@ -149,7 +149,7 @@ pub fn scan_jobs(parsed: &Value) -> Vec<CiLintIssue> {
 }
 
 /// Whether a mapping has at least one of the named keys.
-fn has(job: &serde_yaml::Mapping, names: &[&str]) -> bool {
+fn has(job: &serde_norway::Mapping, names: &[&str]) -> bool {
     names.iter().any(|name| job.get(*name).is_some())
 }
 

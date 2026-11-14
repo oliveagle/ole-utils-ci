@@ -138,8 +138,8 @@ pub fn load_watch_config(path: Option<&str>) -> Result<WatchConfig, String> {
         return Ok(WatchConfig::default());
     }
     let display = resolved.display().to_string();
-    let mut config: WatchConfig =
-        serde_yaml::from_str(&data).map_err(|error| format!("parse config {display}: {error}"))?;
+    let mut config: WatchConfig = serde_norway::from_str(&data)
+        .map_err(|error| format!("parse config {display}: {error}"))?;
     config.apply_defaults();
     Ok(config)
 }

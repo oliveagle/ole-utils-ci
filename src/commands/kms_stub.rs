@@ -105,7 +105,7 @@ pub fn load(path: &Path) -> Result<KmsStubData, String> {
     file.read_to_end(&mut raw)
         .map_err(|e| format!("read stub data: read {}: {}", path.display(), syscall(&e)))?;
     let data: KmsStubData =
-        serde_yaml::from_slice(&raw).map_err(|e| format!("parse stub data: {e}"))?;
+        serde_norway::from_slice(&raw).map_err(|e| format!("parse stub data: {e}"))?;
     if data.pwd.is_empty() && data.key.is_empty() {
         return Err("stub data declares no pwd or key records".to_string());
     }

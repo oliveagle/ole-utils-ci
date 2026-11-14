@@ -92,7 +92,7 @@ pub fn load_config(path: &str) -> Result<GitAuthorConfig, String> {
         Err(e) => return Err(format!("read {path}: {e}")),
     };
     let user: GitAuthorConfig =
-        serde_yaml::from_str(&data).map_err(|e| format!("parse {path}: {e}"))?;
+        serde_norway::from_str(&data).map_err(|e| format!("parse {path}: {e}"))?;
     let mut rules = user.rules;
     rules.append(&mut config.rules);
     config.rules = rules;

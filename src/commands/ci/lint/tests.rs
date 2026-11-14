@@ -7,7 +7,7 @@
 use super::*;
 
 fn rules(text: &str) -> Vec<String> {
-    let parsed = serde_yaml::from_str::<Value>(text).expect("parse");
+    let parsed = serde_norway::from_str::<Value>(text).expect("parse");
     let mut found = scan_text(text);
     found.extend(scan_jobs(&parsed));
     found.extend(scan_folded(text));
