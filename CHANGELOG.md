@@ -1,9 +1,51 @@
-# Changelog
+## [Unreleased]
 
-All notable changes to this project are documented in this file.
+### Added
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+- The `--mode` flag finally does what it always promised: it selects the
+  environment. `--mode dev` is the fast loop — the compiling gates run only
+  the crates the branch touched since `--base-branch`, the Rust driver is
+  `blaze` when it is installed, and the slow `rust-doc`, `rust-audit` and
+  `coverage` gates are reported as skipped instead of running. `--mode ci`
+  is the judge — the whole workspace through plain `cargo`, every gate.
+- A CI job can no longer be degraded. `DEVINE_UTILS_REQUIRE_MODE` pins the
+  mode of a job, and inside CI the tool refuses `--mode dev` unless the
+  pipeline declared it on purpose, and refuses
+  `DEVINE_UTILS_RUST_DRIVER=blaze` in `ci` mode — a fast driver answers from
+  its own cache and can leave a test or a lint out.
+- `.github/workflows/ci.yml`: the two pipelines of this repository. The `fast`
+  job runs the toolchain gates in the declared `dev` mode, the `full` job runs
+  every gate in the authoritative `ci` mode. `tests/ci_workflow.rs` reads the
+  file and fails the build when a job stops pinning its mode, asks for another
+  mode than the one it pinned, or asks for the fast driver.
+- `deny.toml`: the dependency policy, checked by `cargo deny` through the
+  `rust-audit` gate. The licence set is the permissive one a Rust binary may
+  ship under, and every ignored advisory is listed by id with the reason.
+- `make gate-fast` runs the dev loop and `make gate` runs the full one, so the
+  two CI pipelines can be the two commands.
+
+### Changed
+
+- `--mode release` is now spelled `--mode ci`; `release` still works and
+  selects the full run. An unrecognised value also selects the full run, so a
+  typo can never buy a weaker gate.
+- The Rust driver follows the environment: `ci` always answers with `cargo`,
+  because a fast driver answering from its own cache can leave a test or a
+  lint out; `dev` prefers `blaze`. `DEVINE_UTILS_RUST_DRIVER` still overrides
+  both outside CI.
+
+### Fixed
+
+- `--mode dev` and `--base-branch` were parsed and documented but read by
+  nothing, so every run was the full run whatever the flag said.
+- `cargo fmt` was handed `--workspace`, which neither cargo nor blaze takes
+  for `fmt`, so the gate failed as soon as the driver was `blaze`.
+- The workspace check parsed `Cargo.toml` with `Value::from_str`, which is not
+  a document parse in `toml` 0.9, so every repository looked like a
+  workspace.
+- The `PathBuf::join` link in `fsutil` was broken, which `cargo doc` with
+  warnings denied — a failure no one could see, because the driver was
+  `blaze` and never ran rustdoc.
 
 ## [0.12.0] — 2026-11-14
 

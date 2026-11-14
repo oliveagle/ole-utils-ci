@@ -52,6 +52,44 @@ devine-utils-ci bugs --output json
 devine-utils-ci all --output toon
 ```
 
+## The two environments
+
+The tool runs in one of two environments, and `--mode` says which:
+
+| | `--mode dev` | `--mode ci` |
+|---|---|---|
+| what it is | the developer's loop | the judge |
+| scope | the crates the branch touched since `--base-branch` | the whole workspace |
+| Rust driver | `blaze` when it is installed, else `cargo` | always `cargo` |
+| gates | `rust-doc`, `rust-audit` and `coverage` are skipped, and say so | every gate |
+| verdict | a smoke test, never a verdict | the verdict |
+
+```sh
+devine-utils-ci all --mode dev    # fast: the changed crates, the slow gates out
+devine-utils-ci all --mode ci     # full: the whole workspace, every gate
+```
+
+`ci` can do everything `dev` can and more, so a pipeline may run either. A
+`dev` run never pretends to be a `ci` run: each gate it leaves out reports
+`skipped — <reason>`.
+
+### A CI job cannot be degraded
+
+Inside a CI system (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `BUILDKITE`) the
+tool refuses the ways a job could be made weaker:
+
+* `--mode dev` is refused unless the pipeline declared it on purpose with
+  `DEVINE_UTILS_REQUIRE_MODE=dev`;
+* `DEVINE_UTILS_RUST_DRIVER=blaze` is refused in `ci` mode — a fast driver
+  answers from its own cache and can leave a test or a lint out;
+* `DEVINE_UTILS_REQUIRE_MODE=ci` refuses any other mode, so a job that says
+  it runs the full gate cannot be talked into running less.
+
+The two pipelines of this repository are in
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml); every job pins its
+mode there, and `tests/ci_workflow.rs` fails the build when a job stops doing
+so.
+
 ## Commands
 
 ### Language groups
@@ -346,7 +384,7 @@ unknown flag, and `1` for an unknown subcommand.
 | Flag | Default | Meaning |
 |------|---------|---------|
 | `--project-root <path>` | `.` | Repository to inspect; resolved to an absolute path. |
-| `--mode <dev\|release>` | `release` | `dev` runs only the packages changed since `--base-branch`. |
+| `--mode <dev\|ci>` | `ci` | The environment. `dev` is the fast loop: the changed crates since `--base-branch` under cargo, `blaze` when it is installed, `rust-doc`/`rust-audit`/`coverage` skipped. `ci` is the judge: the whole workspace through cargo, every gate. `release` is the old name of `ci` and still selects the full run. |
 | `--base-branch <name>` | `main` | Diff base for the incremental mode. |
 | `--coverage-threshold <n>` | `80` | Line-coverage floor (%). |
 | `--branch-coverage-threshold <n>` | `80` | Branch-coverage floor (%). |
@@ -445,10 +483,18 @@ src/
 make build          # cargo build --all-targets
 make test           # cargo test --all-targets
 make lint           # fmt + clippy
-make gate           # run the tool against this repository
+make gate-fast      # the dev loop: changed crates, blaze, slow gates skipped
+make gate           # the full run: whole workspace, cargo, every gate
 make blaze-build    # build with blaze
 make blaze-test     # run the tests with blaze
 ```
+
+`gate-fast` and `gate` are the two environments the tool now distinguishes, so
+two CI pipelines can be just those two commands: a quick one on every push
+(`make gate-fast`) and a full regression one before a merge (`make gate`). A
+`gate-fast` pass is a smoke test, not a verdict — it prints the gates it left
+out, and the Rust driver follows the environment, so `ci` never answers from a
+fast driver's cache.
 
 The repository dogfoods the tool: `make gate` runs every gate against this
 repository and must stay green — including `ci-go-env`, which scans the tree
@@ -461,6 +507,12 @@ thresholds, so a `make gate` run reports no warnings at all.
 `BLAZE_SANDBOX=off`, because container images that block
 `unshare(CLONE_NEWUSER)` otherwise fail every build with
 `/proc/self/setgroups: Permission denied`.
+
+`deny.toml` is the dependency policy: the licences the tree may ship under
+and the advisories that are ignored, each with its reason. The `rust-audit`
+gate runs `cargo deny check` against it, so the policy is part of the gate
+rather than a document that drifts away from it.
+
 
 ## Licence
 

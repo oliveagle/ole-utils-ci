@@ -9,7 +9,7 @@ TARGET_DIR ?= target
 BIN := $(TARGET_DIR)/debug/devine-utils-ci
 RELEASE_BIN := $(TARGET_DIR)/release/devine-utils-ci
 
-.PHONY: all build release install test lint fmt fmt-check clippy doc check gate gates rust-gates hooks clean blaze-build blaze-test help
+.PHONY: all build release install test lint fmt fmt-check clippy doc check gate gate-fast gates rust-gates hooks clean blaze-build blaze-test help
 
 all: build
 
@@ -51,9 +51,13 @@ doc:
 ## check: fmt-check + clippy + test
 check: fmt-check clippy test
 
-## gate: run every quality gate against this repository
+## gate-fast: the dev loop — changed crates, fast driver, slow gates skipped
+gate-fast: build
+	$(BIN) all --mode dev
+
+## gate: the full run every commit must pass before it leaves the branch
 gate: build
-	$(BIN) all
+	$(BIN) all --mode ci
 	$(BIN) ci-go-env
 
 ## gates: run the language-agnostic gates only
