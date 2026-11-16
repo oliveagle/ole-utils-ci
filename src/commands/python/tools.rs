@@ -24,7 +24,7 @@ const BUILD_HINT: &str = "install the build frontend (`pip install build`) or pa
 
 /// Ruff's own line-length opinions, as a check.
 pub(super) fn ruff_check(cfg: &Config, opts: &Options) -> Result<i32, String> {
-    let program = opts.program("ruff");
+    let program = opts.ruff_program();
     let mut args = vec!["check".to_string(), "--output-format=concise".to_string()];
     push_config(&mut args, opts);
     args.extend(opts.paths());
@@ -36,7 +36,7 @@ pub(super) fn ruff_check(cfg: &Config, opts: &Options) -> Result<i32, String> {
 
 /// The formatter's own idea of the canonical layout, as a check.
 pub(super) fn ruff_format(cfg: &Config, opts: &Options) -> Result<i32, String> {
-    let program = opts.program("ruff");
+    let program = opts.ruff_program();
     let mut args = vec![
         "format".to_string(),
         "--check".to_string(),
@@ -52,7 +52,7 @@ pub(super) fn ruff_format(cfg: &Config, opts: &Options) -> Result<i32, String> {
 
 /// The type annotations the checker can prove, as a check.
 pub(super) fn mypy(cfg: &Config, opts: &Options) -> Result<i32, String> {
-    let program = opts.program("mypy");
+    let program = opts.mypy_program();
     let mut args = vec![
         "--no-error-summary".to_string(),
         "--hide-error-context".to_string(),

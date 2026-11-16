@@ -167,8 +167,10 @@ fn run_step(cfg: &Config, name: &str) -> Result<i32, String> {
         "build" => crate::commands::toolchain::build(cfg),
         "coverage" => crate::commands::toolchain::coverage(cfg),
         "rust" => run_rust(cfg),
-        "python" => run_python(cfg),
-        "mojo" => run_mojo(cfg),
+        // Reached by name from the bare aggregate, where no language flag was parsed: there is
+        // nothing to thread through.
+        "python" => run_python(cfg, &crate::commands::python::Options::default()),
+        "mojo" => run_mojo(cfg, &crate::commands::mojo::Options::default()),
         other => {
             let result = run_gate(cfg, other)?;
             Ok(gates::emit(cfg, &result))
@@ -190,24 +192,39 @@ fn run_gate(cfg: &Config, name: &str) -> Result<gates::GateResult, String> {
 }
 
 /// Runs every Python gate and returns the exit code.
-pub fn run_python(cfg: &Config) -> Result<i32, String> {
+///
+/// `opts` is the caller's own command line: `python all --tool ./venv/bin/ruff` means every gate in
+/// the group, not every gate except the one that needed the flag.
+pub fn run_python(cfg: &Config, opts: &crate::commands::python::Options) -> Result<i32, String> {
+    if !opts.tool.is_empty() {
+        // The group drives three different programs. One flag naming one of them would hand it to
+        // all three, and the run would fail with the linter's usage banner — the kind of failure
+        // that reads like a broken project rather than a misunderstood flag.
+        return Err(
+            "--tool names one binary, and the Python group drives three (ruff, mypy, pytest). \
+             Name them one by one instead: --ruff, --mypy, --interpreter."
+                .to_string(),
+        );
+    }
     if !crate::commands::python::is_project(cfg.root()) {
         println!("No pyproject.toml, setup.py or requirements.txt — skipping the Python gates.");
         return Ok(0);
     }
     run_gates(cfg, "Python", &crate::commands::python::STEPS, |name| {
-        crate::commands::python::run(name, cfg, &crate::commands::python::Options::default())
+        crate::commands::python::run(name, cfg, opts)
     })
 }
 
 /// Runs every Mojo gate and returns the exit code.
-pub fn run_mojo(cfg: &Config) -> Result<i32, String> {
+///
+/// `opts` is the caller's own command line, as for `run_python`.
+pub fn run_mojo(cfg: &Config, opts: &crate::commands::mojo::Options) -> Result<i32, String> {
     if !crate::commands::mojo::is_project(cfg.root()) {
         println!("No Mojo sources — skipping the Mojo gates.");
         return Ok(0);
     }
     run_gates(cfg, "Mojo", &crate::commands::mojo::STEPS, |name| {
-        crate::commands::mojo::run(name, cfg, &crate::commands::mojo::Options::default())
+        crate::commands::mojo::run(name, cfg, opts)
     })
 }
 

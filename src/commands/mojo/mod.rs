@@ -16,13 +16,16 @@
 //! rather than C, so it belongs in a gate that runs where the compiler does
 //! not — a review job, a pre-commit hook, a CI job with no toolchain.
 
+pub mod artifacts;
+pub mod report;
+pub mod scratch;
+pub mod sources;
+pub mod toolchain;
 pub mod usage_gate;
 
 use crate::cli::FlagSet;
-use crate::commands::lang_tool;
 use crate::commands::parse_global;
 use crate::config::Config;
-use crate::fsutil;
 
 /// The name of every Mojo subcommand.
 pub const COMMANDS: [&str; 7] = [
@@ -36,8 +39,19 @@ pub const COMMANDS: [&str; 7] = [
 ];
 
 /// The gates `mojo all` runs, in order: the gate that reads the sources
-/// first, then the toolchain ones.
-pub const STEPS: [&str; 4] = ["mojo-unsafe", "mojo-format", "mojo-build", "mojo-test"];
+/// first, then the toolchain ones, each asking the CLI for the one shape it accepts.
+///
+/// Every gate of the group is here except `mojo` itself, which is the aggregate: a gate left out
+/// is a gate nobody's CI runs, which is how this group came to ship four gates that could not
+/// pass against the CLI they drove.
+pub const STEPS: [&str; 6] = [
+    "mojo-unsafe",
+    "mojo-format",
+    "mojo-build",
+    "mojo-test",
+    "mojo-package",
+    "mojo-doc",
+];
 
 /// Whether the project has any Mojo source at all.
 ///
@@ -54,7 +68,7 @@ pub fn is_project(root: &std::path::Path) -> bool {
 const DEFAULT_TOOL: &str = "mojo";
 
 /// The install line the "tool not found" complaint carries.
-const MOJO_HINT: &str =
+pub(crate) const MOJO_HINT: &str =
     "install the Mojo toolchain (https://docs.modular.com/mojo/) or pass --tool";
 
 /// The extensions a Mojo source file can have. `.🔥` is the language's own
@@ -81,6 +95,14 @@ impl Options {
             self.tool.clone()
         }
     }
+}
+
+/// The program every gate runs: the binary the caller named, else the one on `PATH`.
+///
+/// Both gate modules ask for the program this way, so that `--tool` means the same thing to the
+/// formatter, the compiler, the runner, the precompiler and the doc builder.
+pub(crate) fn program(opts: &Options) -> String {
+    opts.program()
 }
 
 /// Adds the Mojo-only flags to a flag set that already holds the globals.
@@ -134,102 +156,13 @@ pub fn parse(cfg: &mut Config, args: &[String]) -> Result<Options, String> {
 /// Runs one of the Mojo subcommands.
 pub fn run(name: &str, cfg: &Config, opts: &Options) -> Result<i32, String> {
     match name {
-        "mojo" => crate::commands::all::run_mojo(cfg),
+        "mojo" => crate::commands::all::run_mojo(cfg, opts),
         "mojo-unsafe" => usage_gate::no_unsafe(cfg),
-        "mojo-format" => format(cfg, opts),
-        "mojo-build" => build(cfg, opts),
-        "mojo-test" => test(cfg, opts),
-        "mojo-package" => package(cfg, opts),
-        "mojo-doc" => doc(cfg, opts),
+        "mojo-format" => toolchain::format(cfg, opts),
+        "mojo-build" => toolchain::build(cfg, opts),
+        "mojo-test" => toolchain::test(cfg, opts),
+        "mojo-package" => artifacts::package(cfg, opts),
+        "mojo-doc" => artifacts::doc(cfg, opts),
         other => Err(format!("unknown Mojo gate: {other}")),
     }
-}
-
-/// The paths a toolchain gate runs over: what the caller named, else every
-/// source file the project has.
-fn targets(cfg: &Config, opts: &Options) -> Vec<String> {
-    if !opts.paths.is_empty() {
-        return opts.paths.clone();
-    }
-    let mut found: Vec<String> = fsutil::walk_files(cfg.root())
-        .into_iter()
-        .filter(|entry| SOURCE_EXTENSIONS.contains(&entry.extension().as_str()))
-        .map(|entry| entry.rel)
-        .collect();
-    found.sort();
-    found
-}
-
-/// Runs one `mojo` subcommand and turns its exit status into a verdict.
-fn invoke(
-    cfg: &Config,
-    opts: &Options,
-    gate: &str,
-    verb: &str,
-    extra: &[String],
-    what: &str,
-) -> Result<i32, String> {
-    let paths = targets(cfg, opts);
-    if paths.is_empty() {
-        // Nothing to check is not a pass: it is a project that has no Mojo
-        // sources, which the caller has to be told rather than reassured about.
-        println!("  ⚠ No Mojo sources found; skipping {gate}");
-        return Ok(0);
-    }
-    let mut args = vec![verb.to_string()];
-    args.extend(paths);
-    args.extend(extra.iter().cloned());
-    args.extend(opts.tool_args.iter().cloned());
-    let out = lang_tool::run(cfg, &opts.program(), &args, MOJO_HINT)?;
-    let result = lang_tool::verdict(cfg, gate, what, &out);
-    Ok(crate::gates::emit(cfg, &result))
-}
-
-/// `mojo format --check`.
-fn format(cfg: &Config, opts: &Options) -> Result<i32, String> {
-    invoke(
-        cfg,
-        opts,
-        "mojo-format",
-        "format",
-        &["--check".to_string()],
-        "already formatted",
-    )
-}
-
-/// `mojo build`.
-fn build(cfg: &Config, opts: &Options) -> Result<i32, String> {
-    invoke(cfg, opts, "mojo-build", "build", &[], "built")
-}
-
-/// `mojo test`.
-fn test(cfg: &Config, opts: &Options) -> Result<i32, String> {
-    invoke(cfg, opts, "mojo-test", "test", &[], "every test passed")
-}
-
-/// `mojo package`.
-///
-/// The output lands where `--out` says; the default is the project root, so a
-/// CI job collects one predictable artifact.
-fn package(cfg: &Config, opts: &Options) -> Result<i32, String> {
-    invoke(
-        cfg,
-        opts,
-        "mojo-package",
-        "package",
-        &["-o".to_string(), "dist/project.mojopkg".to_string()],
-        "packaged",
-    )
-}
-
-/// `mojo doc`.
-fn doc(cfg: &Config, opts: &Options) -> Result<i32, String> {
-    invoke(
-        cfg,
-        opts,
-        "mojo-doc",
-        "doc",
-        &["-o".to_string(), "target/mojo-docs".to_string()],
-        "documented",
-    )
 }

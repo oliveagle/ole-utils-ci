@@ -136,3 +136,91 @@ fn a_missing_coverage_plugin_is_named() {
         "stderr: {stderr}"
     );
 }
+
+#[test]
+fn the_aggregate_asks_for_one_flag_per_tool() {
+    // The group drives three programs. A single `--tool` would hand one of them to all three, and
+    // the run would fail with the linter's usage banner — a failure that reads like a broken
+    // project rather than a misunderstood flag.
+    let dir = py_fixture("x = 1\n", "requests==2.31.0\n");
+    let root = dir.path().to_string_lossy().into_owned();
+    let (code, stdout, stderr) = main_binary(&[
+        "python",
+        "all",
+        "--project-root",
+        &root,
+        "--tool",
+        "/bin/true",
+    ]);
+    assert_eq!(code, 1, "stdout: {stdout} stderr: {stderr}");
+    assert!(stderr.contains("--ruff"), "stderr: {stderr}");
+    assert!(stderr.contains("--mypy"), "stderr: {stderr}");
+    assert!(stderr.contains("--interpreter"), "stderr: {stderr}");
+}
+
+#[cfg(unix)]
+#[test]
+fn each_gate_runs_the_binary_its_own_flag_names() {
+    use std::os::unix::fs::PermissionsExt;
+
+    // Two tools, two flags: the linter must be the --ruff binary and the type checker the --mypy
+    // one, in the same aggregate run. Each fake records the arguments it was handed, so the
+    // assertion is about what actually ran rather than about what was parsed.
+    let dir = py_fixture("x: int = 1\n", "requests==2.31.0\n");
+    let calls = dir.path().join("calls.txt");
+    let mut scripts = Vec::new();
+    for (name, body) in [("ruff", "exit 0\n"), ("mypy", "exit 0\n")] {
+        let path = dir.path().join(name);
+        std::fs::write(
+            &path,
+            format!("#!/bin/sh\necho \"{name} $*\" >> \"$CALLS\"\n{body}"),
+        )
+        .expect("fake tool write");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        scripts.push(path.to_string_lossy().into_owned());
+    }
+    let root = dir.path().to_string_lossy().into_owned();
+    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_devine-utils-ci"));
+    command
+        .args([
+            "python",
+            "lint",
+            "--project-root",
+            &root,
+            "--ruff",
+            &scripts[0],
+        ])
+        .env("CALLS", &calls);
+    let lint = command.output().expect("lint run");
+    assert!(
+        lint.status.success(),
+        "{}",
+        String::from_utf8_lossy(&lint.stderr)
+    );
+
+    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_devine-utils-ci"));
+    command
+        .args([
+            "python",
+            "typecheck",
+            "--project-root",
+            &root,
+            "--mypy",
+            &scripts[1],
+        ])
+        .env("CALLS", &calls);
+    let typecheck = command.output().expect("typecheck run");
+    assert!(
+        typecheck.status.success(),
+        "{}",
+        String::from_utf8_lossy(&typecheck.stderr)
+    );
+
+    let recorded = std::fs::read_to_string(&calls).unwrap_or_default();
+    assert!(recorded.contains("ruff check"), "calls: {recorded}");
+    assert!(recorded.contains("mypy "), "calls: {recorded}");
+    assert!(
+        !recorded.contains("mypy check"),
+        "the linter's verb never reached mypy: {recorded}"
+    );
+}

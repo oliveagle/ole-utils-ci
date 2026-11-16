@@ -141,6 +141,10 @@ the commands it has and exits. `all` runs every gate of the group, in
 order, and stops at the first failure, exactly like `all` does. The flat
 commands keep working unchanged.
 
+"Every gate" means every gate: `python all` includes `python-coverage`, and
+`mojo all` includes `mojo-package` and `mojo-doc`. A gate only reachable by
+naming it by hand is a gate no CI job runs.
+
 ### Git hooks
 
 `hook` answers the questions that are cheap to fix before a commit exists and
@@ -246,11 +250,11 @@ never replaced without `--force` and never deleted at all.
 | `python-build` | `python3 -m build`. |
 | `python-no-shell-exec` | No `os.system`, `os.popen`, `shell=True` or `subprocess.getoutput` in the sources. |
 | `python-deps` | `requirements*.txt` entries must pin with `==`. |
-| `mojo-format` | `mojo format` in check mode. |
-| `mojo-build` | `mojo build`. |
-| `mojo-test` | `mojo test`. |
-| `mojo-package` | `mojo package`. |
-| `mojo-doc` | `mojo doc`. |
+| `mojo-format` | `mojo format` run on a scratch copy, then compared: the CLI has no check mode. |
+| `mojo-build` | `mojo build` once per file that declares a `main`, output to a scratch tree. |
+| `mojo-test` | `mojo run` once per test file: the CLI has no `test` command. |
+| `mojo-package` | `mojo precompile` once per package directory (a directory holding `__init__.mojo`). |
+| `mojo-doc` | `mojo doc` once per package directory, else once per module: `doc` takes one input. |
 | `mojo-unsafe` | No `unsafe_*` identifiers in the sources (`.mojo` and `.🔥`). |
 | `test-report` | JUnit XML report. |
 | `all` | The whole quality gate, in CI order. |
@@ -403,6 +407,17 @@ source gates (`python-no-shell-exec`, `python-deps`, `mojo-unsafe`) read
 the files and need no toolchain, so they run anywhere; the toolchain gates
 drive the project's own tools and **fail — never pass — when the tool is
 missing**, because a gate whose tool never ran proves nothing.
+
+The Mojo gates are written against the CLI that ships today (1.2): `format`
+has no check mode, `build` and `doc` take exactly one input, `package` is
+`precompile` and takes one package directory, and there is no `test`
+subcommand at all — a test is a file you run. Each gate therefore asks the
+tool for the one shape it accepts, and writes nothing into the project.
+
+The Python group drives three programs, so it takes three flags: `--ruff`
+(lint and format), `--mypy` (typecheck) and `--interpreter` (test, coverage
+and build). A single `--tool` still names the binary of whichever gate you
+ran; the aggregate refuses it rather than handing one binary to all three.
 
 Every command accepts `--output json` or `--output toon` where it reports
 findings, and every command exits `0` on success, `1` on a failed check or an

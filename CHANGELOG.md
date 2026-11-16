@@ -29,6 +29,37 @@
   `file-length` accept `.py`, `.pyi`, `.mojo` and `.🔥`, and
   `complexity` counts Python and Mojo source.
 
+### Fixed
+
+- **The Mojo gates drive the CLI that exists.** They were written against a
+  `mojo` that has no check mode to run, one input per command, and a `test`
+  subcommand — none of which is true of the toolchain (1.2) they are meant to
+  drive: `format --check` is an unrecognised argument, `build` and `doc`
+  answer "too many input files" for any project with two sources, `package`
+  takes a directory and is called `precompile`, and `test` is not a command.
+  Each gate now asks for the shape the tool accepts: the formatter runs on a
+  scratch copy that is compared and discarded (the project is never written to),
+  the compiler runs once per file declaring a `main`, the runner runs once per
+  test file (`test_*.mojo` or `*_test.mojo`), and packaging and docs take one
+  package directory each.
+- **`.🔥` is reported, not passed to the toolchain.** The CLI stopped
+  accepting the extension (`Extension no longer supported`), so a source that
+  still carries it is named along with the rename, and a project whose only
+  sources use it fails instead of passing unread.
+- **`python all` runs coverage.** It was the one gate of the group the
+  aggregate skipped, which made the threshold a number nobody's CI checked.
+- **The Python group takes one flag per tool.** `--tool` named a single binary
+  and was handed to all three programs the group drives, so
+  `python all --tool ./venv/bin/ruff` ran the type checker with ruff and failed
+  on `--no-error-summary`. `--ruff`, `--mypy` and `--interpreter` each name
+  their own; the aggregate refuses `--tool` instead of misrouting it.
+- **`<group> all` keeps the flags it was given.** The aggregate re-dispatched
+  every gate with default options, so `mojo all --tool …` looked for `mojo` on
+  `PATH` and `python all --interpreter …` ran `python3`. Both are threaded
+  through now.
+- `rust all`, `python all` and `mojo all` no longer print a header around a
+  run that already printed one per gate, nor the same verdict twice.
+
 ## [0.15.0] — 2026-11-14
 
 ### Changed

@@ -137,6 +137,15 @@ fn wants_help(args: &[String]) -> bool {
 ///
 /// The first failure stops the run, exactly like the `all` command does.
 fn aggregate(lang: &Language, args: &[String]) -> Result<i32, String> {
+    // A group whose aggregate is the command that bears its name (rust, python, mojo) already runs
+    // its gates and prints their verdicts. Wrapping it would draw a header around a run that
+    // printed one per gate and then say the same thing twice: "── mojo ──", six gates,
+    // "All Mojo gates passed", "mojo passed", "All Mojo gates passed".
+    if let [only] = lang.aggregate {
+        if *only == lang.name {
+            return dispatch::dispatch_flat(only, args);
+        }
+    }
     let mut failures: Vec<&str> = Vec::new();
     for command in lang.aggregate {
         let label = lang.label(command);

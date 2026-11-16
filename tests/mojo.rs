@@ -2,40 +2,16 @@
 // Licensed under the Apache License, Version 2.0.
 // SPDX-License-Identifier: Apache-2.0
 
-//! End-to-end tests for the `mojo` group.
+//! End-to-end tests for the `mojo` group: the gates that read the sources themselves.
 //!
-//! The toolchain gates shell out to `mojo`, so what they are pinned on here is
-//! the missing-tool complaint; `unsafe` reads the sources itself, and reads
-//! both extensions the language gives a file.
+//! `unsafe` is one of them — it reads what the language calls unsafe and needs no toolchain — and
+//! so is the check that a toolchain gate names the tool it could not find instead of passing.
+//! The gates that drive the `mojo` binary are in `mojo_toolchain.rs`, against a fake `mojo` that
+//! records the command line it was handed.
 
-use std::process::Command;
+mod support;
 
-use tempfile::TempDir;
-
-/// Runs a binary with `args` and returns its exit code, stdout and stderr.
-fn run(binary: &str, args: &[&str]) -> (i32, String, String) {
-    let output = Command::new(binary)
-        .args(args)
-        .output()
-        .expect("failed to spawn the binary");
-    (
-        output.status.code().unwrap_or(-1),
-        String::from_utf8_lossy(&output.stdout).into_owned(),
-        String::from_utf8_lossy(&output.stderr).into_owned(),
-    )
-}
-
-/// Runs the main binary.
-fn main_binary(args: &[&str]) -> (i32, String, String) {
-    run(env!("CARGO_BIN_EXE_devine-utils-ci"), args)
-}
-
-/// Builds a throwaway project holding one Mojo source.
-fn mojo_fixture(source: &str, name: &str) -> TempDir {
-    let dir = tempfile::tempdir().expect("temp dir");
-    std::fs::write(dir.path().join(name), source).expect("source write");
-    dir
-}
+use support::{main_binary, mojo_fixture, run};
 
 #[test]
 fn the_mojo_group_rejects_an_escape_hatch() {

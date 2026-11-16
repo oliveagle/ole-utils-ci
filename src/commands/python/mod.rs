@@ -41,13 +41,18 @@ pub const COMMANDS: [&str; 9] = [
 /// The gates `python all` runs, in order: the two that need no toolchain
 /// first, so a job with no Python still reports on the sources and the pins
 /// before a missing tool can stop the run.
-pub const STEPS: [&str; 7] = [
+///
+/// Coverage runs with the rest: a gate that only runs when somebody remembers
+/// to name it is a gate that is not a gate, and the floor it checks
+/// (--coverage-threshold) is the same number every other run of the tool uses.
+pub const STEPS: [&str; 8] = [
     "python-no-shell-exec",
     "python-deps",
     "python-format",
     "python-lint",
     "python-typecheck",
     "python-test",
+    "python-coverage",
     "python-build",
 ];
 
@@ -75,7 +80,15 @@ pub struct Options {
     /// What the gate runs over; the project root when the caller names none.
     pub paths: Vec<String>,
     /// The linter / formatter / type checker to run, when it is not the default.
+    ///
+    /// One flag for one gate: naming a single binary is only meaningful when the gate being run
+    /// has a single tool. The group has three (ruff, mypy, pytest), so the aggregate refuses
+    /// this flag and asks for --ruff, --mypy and --interpreter instead.
     pub tool: String,
+    /// The ruff binary, for the gates that lint and format.
+    pub ruff: String,
+    /// The mypy binary, for the gate that type-checks.
+    pub mypy: String,
     /// The interpreter that runs `-m pytest` and friends.
     pub interpreter: String,
     /// A tool configuration file, passed as `--config` when set.
@@ -92,6 +105,8 @@ impl Default for Options {
         Options {
             paths: Vec::new(),
             tool: String::new(),
+            ruff: String::new(),
+            mypy: String::new(),
             interpreter: DEFAULT_INTERPRETER.to_string(),
             config: String::new(),
             tool_args: Vec::new(),
@@ -109,12 +124,25 @@ impl Options {
         }
     }
 
-    /// The program to run for a gate whose default is `default`.
-    fn program(&self, default: &str) -> String {
-        if self.tool.is_empty() {
-            default.to_string()
-        } else {
+    /// The binary that lints and formats: ruff.
+    pub fn ruff_program(&self) -> String {
+        if !self.ruff.is_empty() {
+            self.ruff.clone()
+        } else if !self.tool.is_empty() {
             self.tool.clone()
+        } else {
+            "ruff".to_string()
+        }
+    }
+
+    /// The binary that type-checks: mypy.
+    pub fn mypy_program(&self) -> String {
+        if !self.mypy.is_empty() {
+            self.mypy.clone()
+        } else if !self.tool.is_empty() {
+            self.tool.clone()
+        } else {
+            "mypy".to_string()
         }
     }
 }
@@ -123,11 +151,15 @@ impl Options {
 fn add_flags(fs: &mut FlagSet) {
     fs.value_flag("paths")
         .str_flag("tool", "")
+        .str_flag("ruff", "")
+        .str_flag("mypy", "")
         .str_flag("interpreter", DEFAULT_INTERPRETER)
         .str_flag("config", "")
         .value_flag("tool-args")
         .describe("paths", "paths to run over (default: the project root)")
-        .describe("tool", "the linter/formatter/type checker to run")
+        .describe("tool", "the tool to run, for a gate that drives one")
+        .describe("ruff", "the ruff binary (lint and format)")
+        .describe("mypy", "the mypy binary (typecheck)")
         .describe(
             "interpreter",
             "the interpreter that runs -m pytest (default: python3)",
@@ -154,6 +186,8 @@ fn options_from(fs: &FlagSet, rest: Vec<String>) -> Options {
     Options {
         paths,
         tool: text("tool", ""),
+        ruff: text("ruff", ""),
+        mypy: text("mypy", ""),
         // An empty `--interpreter` means "the default", not "run the empty path".
         interpreter: if interpreter.is_empty() {
             DEFAULT_INTERPRETER.to_string()
@@ -188,7 +222,15 @@ pub fn parse(cfg: &mut Config, args: &[String]) -> Result<Options, String> {
 
 /// Whether an argument is one of the flags only this module registers.
 fn is_private_flag(arg: &str) -> bool {
-    const PRIVATE: [&str; 5] = ["paths", "tool", "interpreter", "config", "tool-args"];
+    const PRIVATE: [&str; 7] = [
+        "paths",
+        "tool",
+        "ruff",
+        "mypy",
+        "interpreter",
+        "config",
+        "tool-args",
+    ];
     let name = arg.trim_start_matches('-');
     let name = name.split('=').next().unwrap_or(name);
     !arg.starts_with('-') || PRIVATE.contains(&name)
@@ -197,7 +239,7 @@ fn is_private_flag(arg: &str) -> bool {
 /// Runs one of the Python subcommands.
 pub fn run(name: &str, cfg: &Config, opts: &Options) -> Result<i32, String> {
     match name {
-        "python" => crate::commands::all::run_python(cfg),
+        "python" => crate::commands::all::run_python(cfg, opts),
         "python-no-shell-exec" => hygiene::no_shell_exec(cfg),
         "python-deps" => hygiene::dependencies(cfg),
         "python-lint" => tools::ruff_check(cfg, opts),
