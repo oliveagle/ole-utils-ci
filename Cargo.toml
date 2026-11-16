@@ -1,6 +1,6 @@
 [package]
 name = "devine-utils-ci"
-version = "0.15.0"
+version = "0.16.0"
 edition = "2021"
 rust-version = "1.85"
 description = "Unified CI quality-gate tool — Rust rewrite of devine-utils-ci"
