@@ -101,10 +101,13 @@ pub fn verdict(
     if report.ok {
         // The tool failed without a line this gate could attribute: its own
         // words are the finding, so the reader is never shown an empty pass.
+        // The finding is the sentence to act on, not the last line of a
+        // wall: a tool's first line is often its usage banner and its last a
+        // path inside a report table.
         report.add(Diagnostic::error(
             "",
             format!("{gate}.tool"),
-            tail_of(&out.output),
+            blame_of(&out.output),
         ));
     }
     let found = report.diagnostics.len();
@@ -159,9 +162,50 @@ pub fn tail_of(text: &str) -> String {
     lines[start..].join("\n")
 }
 
+/// The one line of a failing tool's output that says what went wrong.
+///
+/// A tool that fails without printing `path:line:col` still has a sentence a
+/// reader can act on somewhere in its output: pytest puts a coverage failure
+/// under its own summary table, and a usage error sits under a banner. That
+/// sentence is the first line naming an error; with none to find, the first
+/// non-empty line is the next best thing, and a silent tool still says
+/// something rather than nothing.
+pub fn blame_of(text: &str) -> String {
+    let mut first = "";
+    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        if first.is_empty() {
+            first = line;
+        }
+        if line.to_lowercase().contains("error") {
+            return line.to_string();
+        }
+    }
+    if first.is_empty() {
+        "the tool failed without a message".to_string()
+    } else {
+        first.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_blame_is_the_line_that_names_an_error() {
+        let wall = "usage: pytest [options]\n.\n".to_string()
+            + "ERROR: Coverage failure: total of 86 is less than fail-under=100\n"
+            + "  Name  Stmts  Cover\n";
+        assert_eq!(
+            blame_of(&wall),
+            "ERROR: Coverage failure: total of 86 is less than fail-under=100"
+        );
+    }
+
+    #[test]
+    fn a_silent_tool_still_says_something() {
+        assert_eq!(blame_of("   \n\n"), "the tool failed without a message");
+    }
 
     #[test]
     fn parses_ruff_style_findings() {

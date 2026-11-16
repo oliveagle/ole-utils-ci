@@ -106,3 +106,33 @@ fn the_python_binary_prints_the_same_help_as_the_group() {
     assert_eq!(group_code, binary_code);
     assert_eq!(group_stdout, binary_stdout);
 }
+
+#[cfg(unix)]
+#[test]
+fn a_missing_coverage_plugin_is_named() {
+    use std::os::unix::fs::PermissionsExt;
+
+    // An interpreter that cannot import pytest_cov: the probe fails before
+    // pytest could answer the `--cov` arguments with its usage banner.
+    let dir = py_fixture("x = 1\n", "requests==2.31.0\n");
+    let fake = dir.path().join("interpreter-without-the-plugin");
+    std::fs::write(&fake, "#!/bin/sh\nexit 3\n").expect("fake interpreter write");
+    std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    let root = dir.path().to_string_lossy().into_owned();
+    let interpreter = fake.to_string_lossy().into_owned();
+
+    let (code, stdout, stderr) = main_binary(&[
+        "python",
+        "coverage",
+        "--project-root",
+        &root,
+        "--interpreter",
+        &interpreter,
+    ]);
+    assert_eq!(code, 1, "stdout: {stdout} stderr: {stderr}");
+    assert!(stderr.contains("pytest_cov"), "stderr: {stderr}");
+    assert!(
+        stderr.contains("pip install pytest-cov"),
+        "stderr: {stderr}"
+    );
+}

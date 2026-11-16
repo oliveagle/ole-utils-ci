@@ -68,6 +68,28 @@ pub(super) fn mypy(cfg: &Config, opts: &Options) -> Result<i32, String> {
     Ok(emit(cfg, &result))
 }
 
+/// The coverage gate needs pytest-cov, and pytest does not say so.
+///
+/// Without the plugin, pytest answers a `--cov` line with "unrecognized
+/// arguments: --cov", under its own usage banner — a wall of text that names
+/// neither the plugin nor the fix. Asking the interpreter for the module first
+/// turns that into one sentence.
+fn require_pytest_cov(cfg: &Config, opts: &Options) -> Result<(), String> {
+    // A dry run gates nothing, so it must not need the plugin either.
+    if cfg.dry_run {
+        return Ok(());
+    }
+    let args = vec!["-c".to_string(), "import pytest_cov".to_string()];
+    let out = lang_tool::run(cfg, &opts.interpreter, &args, COV_HINT)?;
+    if out.success {
+        return Ok(());
+    }
+    Err(format!(
+        "{} cannot import pytest_cov — {COV_HINT}",
+        opts.interpreter
+    ))
+}
+
 /// The test suite, with or without the coverage floor.
 pub(super) fn pytest(cfg: &Config, opts: &Options, coverage: bool) -> Result<i32, String> {
     let gate = if coverage {
@@ -75,6 +97,9 @@ pub(super) fn pytest(cfg: &Config, opts: &Options, coverage: bool) -> Result<i32
     } else {
         "python-test"
     };
+    if coverage {
+        require_pytest_cov(cfg, opts)?;
+    }
     let mut args = vec!["-m".to_string(), "pytest".to_string(), "-q".to_string()];
     if !cfg.junit_path.is_empty() {
         args.push(format!("--junit-xml={}", cfg.junit_path));
