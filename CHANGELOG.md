@@ -1,3 +1,27 @@
+## [0.17.0] — 2026-11-16
+
+### Added
+
+- **Rhai.** A `rhai` group with one gate, `rhai-check`. The syntax check is
+  the real Rhai compiler rather than a regex, so a parse error carries the
+  compiler's own line and column. The coverage is observed, not inferred: the
+  cases a JSON file declares are called in a sandboxed Rhai engine with an
+  explicit operation budget, Rhai's debugger reports every executable line,
+  and a semantics-preserving probe around each `if`, `while` and
+  `do ... while` condition records both outcomes. The source on disk is
+  never rewritten.
+- **MoonBit.** A `moonbit` group with one gate, `moonbit-check`, driving
+  `moon check --json`, `moon fmt --check`, `moon test` and — when tests
+  exist — `moon coverage report -f cobertura`. It requires a `moon.mod` at
+  or above `--src`: a missing module is a finding, not a silently empty run.
+  The toolchain reports line coverage and no branch outcomes, so the payload
+  marks branch coverage unsupported instead of inventing a percentage.
+- `ole-utils-rhai` and `ole-utils-moonbit` run their groups without naming
+  them, and the shared `complexity` gate counts Rhai (`fn` headers with
+  brace-delimited bodies, like Rust) and MoonBit (`fn` headers whose bodies
+  carry `guard`, `catch` and match arms) next to the languages it already
+  knew.
+
 ## [0.16.0] — 2026-11-16
 
 ### Added

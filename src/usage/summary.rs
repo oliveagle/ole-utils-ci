@@ -20,6 +20,8 @@ Groups:
   tengo    The Tengo tool gates: unit tests, coverage and mutation testing.
   proto    The protobuf gates: buf lint, breaking changes and code generation.
   web      The web gate: HTML, CSS, JavaScript and TypeScript.
+  rhai     The Rhai gate: syntax, line/branch coverage and complexity.
+  moonbit  The MoonBit gate: check, format, tests, line coverage and complexity.
   python   The Python gates: ruff, mypy, pytest, and the source gates.
   mojo     The Mojo gates: format, build, test, package, doc and safety.
   common   The language-agnostic gates every project runs.

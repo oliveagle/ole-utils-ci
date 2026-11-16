@@ -42,6 +42,8 @@ pub fn language_for_extension(ext: &str) -> Option<&'static str> {
         ".tengo" => "tengo",
         ".ts" | ".tsx" | ".mts" | ".cts" => "ts",
         ".js" | ".jsx" | ".mjs" | ".cjs" => "js",
+        ".rhai" => "rhai",
+        ".mbt" => "moonbit",
         ".py" | ".pyi" => "python",
         ".mojo" | ".🔥" => "mojo",
         _ => return None,
@@ -50,6 +52,7 @@ pub fn language_for_extension(ext: &str) -> Option<&'static str> {
 
 /// Scans one source file and returns the complexity of each function in it.
 pub fn scan_file(path: &str, source: &str, language: &str) -> Vec<FunctionMetric> {
+    use super::moonbit::scan_moonbit;
     use super::python::scan_python;
     use super::scanners::{scan_go, scan_rust, scan_script};
     match language {
@@ -60,6 +63,9 @@ pub fn scan_file(path: &str, source: &str, language: &str) -> Vec<FunctionMetric
         // Mojo is Python-shaped where this gate can see: indented blocks made
         // of statements, with `def` starting a function.
         "python" | "mojo" => scan_python(path, source, language),
+        // Rhai spells a function like Rust, so the Rust scanner reads it.
+        "rhai" => scan_rust(path, source),
+        "moonbit" => scan_moonbit(path, source),
         _ => Vec::new(),
     }
 }
@@ -182,4 +188,36 @@ pub fn match_body(chars: &[char], open_brace: usize) -> Option<(String, usize)> 
         i += 1;
     }
     None
+}
+
+/// The languages the report names.
+///
+/// The Go original names its four scanners. This port also understands Rust,
+/// so a Cargo project gets an extra entry — and a Go project's payload stays
+/// byte-identical to the original's.
+pub(crate) fn reported_languages(root: &std::path::Path) -> Vec<&'static str> {
+    let mut languages = LANGUAGES.to_vec();
+    if root.join("Cargo.toml").is_file() {
+        languages.push(RUST_LANGUAGE);
+    }
+    if crate::commands::python::is_project(root) {
+        languages.push("python");
+    }
+    if crate::commands::mojo::is_project(root) {
+        languages.push("mojo");
+    }
+    if has_extension(root, ".rhai") {
+        languages.push("rhai");
+    }
+    if has_extension(root, ".mbt") {
+        languages.push("moonbit");
+    }
+    languages
+}
+
+/// Whether the project holds a source file with that extension.
+fn has_extension(root: &std::path::Path, extension: &str) -> bool {
+    crate::fsutil::walk_files(root)
+        .iter()
+        .any(|entry| entry.extension() == extension)
 }

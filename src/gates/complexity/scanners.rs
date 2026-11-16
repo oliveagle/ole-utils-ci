@@ -51,7 +51,7 @@ fn rust_signature(chars: &[char], fn_index: usize) -> Option<(String, usize)> {
 
 /// Finds the index of the next `{` at or after `from`, skipping over
 /// generic parameter lists and return types.
-fn find_next_brace(chars: &[char], from: usize) -> Option<usize> {
+pub(super) fn find_next_brace(chars: &[char], from: usize) -> Option<usize> {
     let mut i = from;
     let mut angle_depth = 0i32;
     while i < chars.len() {
@@ -243,7 +243,7 @@ fn enclosing_name(chars: &[char], index: usize) -> String {
 }
 
 /// Whether `word` starts at `index` and is not part of a longer identifier.
-fn at_word_start(chars: &[char], index: usize, word: &str) -> bool {
+pub(super) fn at_word_start(chars: &[char], index: usize, word: &str) -> bool {
     let needle: Vec<char> = word.chars().collect();
     if index + needle.len() > chars.len() {
         return false;

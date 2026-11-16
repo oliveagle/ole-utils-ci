@@ -40,6 +40,14 @@ name = "ole-utils-web"
 path = "src/bin/ole_utils_web.rs"
 
 [[bin]]
+name = "ole-utils-rhai"
+path = "src/bin/ole_utils_rhai.rs"
+
+[[bin]]
+name = "ole-utils-moonbit"
+path = "src/bin/ole_utils_moonbit.rs"
+
+[[bin]]
 name = "ole-utils-python"
 path = "src/bin/ole_utils_python.rs"
 
@@ -57,6 +65,7 @@ globset = "0.4"
 ignore = "0.4"
 libc = "0.2"
 regex = "1"
+rhai = { version = "1.27.0", features = ["serde", "sync", "internals", "debugging"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
 serde_norway = "0.9"

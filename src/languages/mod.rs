@@ -16,6 +16,7 @@
 //! Both spellings run the same code: a group is a view over the flat
 //! surface, never a second implementation of it.
 
+mod common;
 mod registry;
 #[cfg(test)]
 mod tests;

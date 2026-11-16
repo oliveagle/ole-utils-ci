@@ -195,6 +195,10 @@ Rust gates (added by this build; the Go tool has none of them):
   rust-panic           No unwrap / expect / panic! in production code.
   rust-msrv            The declared MSRV must be supported.
 
+Rhai and MoonBit gates (added by this build; the Go tool has none of them):
+  rhai-check           Rhai syntax, observed line/branch coverage, complexity.
+  moonbit-check        moon check, formatting, tests, line coverage, complexity.
+
 Python and Mojo gates (added by this build; the Go tool has none of them):
   python-lint          ruff check.
   python-format        ruff format --check --diff.

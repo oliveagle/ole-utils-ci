@@ -8,6 +8,7 @@
 //! groups add no behaviour of their own: they only decide which command
 //! runs and in which order the aggregate runs them.
 
+use super::common::COMMON;
 use super::Language;
 
 /// Every language group, in the order the usage text prints them.
@@ -144,6 +145,28 @@ pub const LANGUAGES: &[Language] = &[
         aggregate: &["tengo-test", "tengo-coverage", "tengo-mutate"],
     },
     Language {
+        name: "rhai",
+        title: "Rhai",
+        summary: "The Rhai gate: syntax, line/branch coverage and complexity.",
+        commands: &[(
+            "check",
+            "rhai-check",
+            "Run syntax, line/branch coverage and complexity budgets.",
+        )],
+        aggregate: &["rhai-check"],
+    },
+    Language {
+        name: "moonbit",
+        title: "MoonBit",
+        summary: "The MoonBit gate: check, format, tests, line coverage and complexity.",
+        commands: &[(
+            "check",
+            "moonbit-check",
+            "Run compiler checks, formatting, tests, line coverage and complexity budgets.",
+        )],
+        aggregate: &["moonbit-check"],
+    },
+    Language {
         name: "proto",
         title: "Protobuf",
         summary: "The protobuf gates: lint, breaking changes and code generation.",
@@ -235,58 +258,5 @@ pub const LANGUAGES: &[Language] = &[
         ],
         aggregate: &["mojo"],
     },
-    Language {
-        name: "common",
-        title: "Common",
-        summary: "The language-agnostic gates every project runs.",
-        commands: &[
-            (
-                "bugs",
-                "bugs",
-                "Scan the sources for the leftover marker comments.",
-            ),
-            (
-                "sanity",
-                "sanity",
-                "Check trailing whitespace and conflict markers.",
-            ),
-            ("license", "license", "Check the license headers."),
-            ("structure", "structure", "Check the directory structure."),
-            (
-                "file-length",
-                "file-length",
-                "Check the source file budgets.",
-            ),
-            (
-                "complexity",
-                "complexity",
-                "Check the cyclomatic complexity.",
-            ),
-            (
-                "arch",
-                "arch",
-                "Check the architecture rules (cycles, layers, naming).",
-            ),
-            (
-                "artifact-size",
-                "artifact-size",
-                "Check the release-artifact budgets.",
-            ),
-            (
-                "hook",
-                "hook",
-                "The commit and push policy checks a git hook runs.",
-            ),
-        ],
-        aggregate: &[
-            "bugs",
-            "sanity",
-            "license",
-            "structure",
-            "file-length",
-            "complexity",
-            "arch",
-            "artifact-size",
-        ],
-    },
+    COMMON,
 ];

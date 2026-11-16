@@ -23,6 +23,8 @@ pub const COMMANDS: &str = r#"Commands:
   no-shell-exec        Reject production Go code that executes bash/sh.
   plugin-freshness     Reject plugin .so files older than their source.
   web-lint             Lint HTML/CSS/JS/TS/TSX/JSX; accepts path or content.
+  rhai-check           Rhai syntax, line/branch coverage and complexity.
+  moonbit-check        MoonBit check, format, tests, line coverage and complexity.
   arch                 Run architecture rule checks (cycles, layers, naming).
   test                 Run tests with race detection.
                        Steps:

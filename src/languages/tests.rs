@@ -52,6 +52,11 @@ fn a_subcommand_resolves_to_its_flat_command() {
         Some("buf-breaking")
     );
     assert_eq!(resolve("web", "lint").as_deref(), Some("web-lint"));
+    assert_eq!(resolve("rhai", "check").as_deref(), Some("rhai-check"));
+    assert_eq!(
+        resolve("moonbit", "check").as_deref(),
+        Some("moonbit-check")
+    );
     assert_eq!(resolve("common", "bugs").as_deref(), Some("bugs"));
 }
 
@@ -109,6 +114,10 @@ fn the_aggregate_commands_are_listed_in_order() {
     assert_eq!(group.aggregate_commands(), ["rust"]);
     let group = find("web").expect("group");
     assert_eq!(group.aggregate_commands(), ["web-lint"]);
+    let group = find("rhai").expect("group");
+    assert_eq!(group.aggregate_commands(), ["rhai-check"]);
+    let group = find("moonbit").expect("group");
+    assert_eq!(group.aggregate_commands(), ["moonbit-check"]);
 }
 
 #[test]

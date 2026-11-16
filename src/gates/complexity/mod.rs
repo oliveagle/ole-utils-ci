@@ -9,6 +9,7 @@
 //! Rust is covered alongside Go, Tengo, TypeScript and JavaScript.
 
 pub mod lang;
+pub mod moonbit;
 pub mod python;
 pub mod scanners;
 
@@ -98,25 +99,6 @@ fn severity_for(value: usize, thresholds: Thresholds) -> Option<Severity> {
     }
 }
 
-/// The languages the report names.
-///
-/// The Go original names its four scanners. This port also understands Rust,
-/// so a Cargo project gets an extra entry — and a Go project's payload stays
-/// byte-identical to the original's.
-fn reported_languages(root: &std::path::Path) -> Vec<&'static str> {
-    let mut languages = lang::LANGUAGES.to_vec();
-    if root.join("Cargo.toml").is_file() {
-        languages.push(lang::RUST_LANGUAGE);
-    }
-    if crate::commands::python::is_project(root) {
-        languages.push("python");
-    }
-    if crate::commands::mojo::is_project(root) {
-        languages.push("mojo");
-    }
-    languages
-}
-
 /// Runs the gate and returns its result.
 pub fn run(cfg: &Config) -> Result<GateResult, String> {
     let qcfg = QualityConfig::load(cfg.root())?.unwrap_or_default();
@@ -128,7 +110,7 @@ pub fn run(cfg: &Config) -> Result<GateResult, String> {
     // them in, so the JSON payload is byte-identical to the original's.
     report.extra = Some(serde_json::json!({
         "functions_scanned": total,
-        "languages": reported_languages(cfg.root()),
+        "languages": lang::reported_languages(cfg.root()),
         "max_threshold": thresholds.max,
         "warn_threshold": thresholds.warn,
     }));

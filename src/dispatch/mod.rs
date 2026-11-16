@@ -90,6 +90,10 @@ pub(crate) fn dispatch_flat(command: &str, args: &[String]) -> Result<i32, Strin
         "tengo-test" => commands::tengo::tengo_test(args),
         "tengo-coverage" => commands::tengo::tengo_coverage(args),
         "tengo-mutate" => commands::tengo::tengo_mutate(args),
+        // Rhai and MoonBit own private flag sets and drive their own
+        // toolchains, so they take their raw argument list.
+        "rhai-check" => commands::rhai::rhai_check(args),
+        "moonbit-check" => commands::moonbit::moonbit_check(args),
         "all" => with_config(commands::all::run, &mut cfg, args),
         "version-check" => with_config(commands::version::version_check, &mut cfg, args),
         "release-check" => with_config(commands::version::release_check, &mut cfg, args),

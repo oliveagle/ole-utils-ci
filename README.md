@@ -103,6 +103,8 @@ languages can be driven one language at a time:
 devine-utils-ci golang test        # same as `devine-utils-ci test`
 devine-utils-ci rust clippy        # same as `devine-utils-ci rust-clippy`
 devine-utils-ci tengo test         # same as `devine-utils-ci tengo-test`
+devine-utils-ci rhai check         # same as `devine-utils-ci rhai-check`
+devine-utils-ci moonbit check      # same as `devine-utils-ci moonbit-check`
 devine-utils-ci python test        # same as `devine-utils-ci python-test`
 devine-utils-ci mojo build         # same as `devine-utils-ci mojo-build`
 devine-utils-ci proto breaking     # same as `devine-utils-ci buf-breaking`
@@ -121,6 +123,8 @@ devine-utils-ci mojo all           # every Mojo gate, in order
 | `python` | `python`, `python-lint`, `python-format`, `python-typecheck`, `python-test`, `python-coverage`, `python-build`, `python-no-shell-exec`, `python-deps` |
 | `mojo` | `mojo`, `mojo-format`, `mojo-build`, `mojo-test`, `mojo-package`, `mojo-doc`, `mojo-unsafe` |
 | `tengo` | `tengo-test`, `tengo-coverage`, `tengo-mutate` |
+| `rhai` | `rhai-check` |
+| `moonbit` | `moonbit-check` |
 | `proto` | `buf-lint`, `buf-breaking`, `buf-generate` |
 | `web` | `web-lint` |
 | `common` | `bugs`, `sanity`, `license`, `structure`, `file-length`, `complexity`, `arch`, `artifact-size`, `hook` |
@@ -134,6 +138,8 @@ ole-utils-rust all                  # every Rust gate, in order
 ole-utils-python lint              # same as `devine-utils-ci python lint`
 ole-utils-mojo all                  # every Mojo gate, in order
 ole-utils-tengo --help              # the commands of the group
+ole-utils-rhai check                # every Rhai source under --src
+ole-utils-moonbit check             # check, test and cover a MoonBit module
 ```
 
 A group runs nothing until you name a command: on its own it prints
@@ -199,6 +205,8 @@ never replaced without `--force` and never deleted at all.
 
 | Command | What it does |
 |---------|--------------|
+| `rhai-check` | Rhai syntax, observed line/branch coverage and per-function complexity in one gate. |
+| `moonbit-check` | `moon check`, formatting, tests, observed line coverage and per-function complexity in one gate. |
 | `bugs` | Scans for `BUG` / `FIXME` / `HACK` / `XXX` markers. Zero tolerance. |
 | `sanity` | Trailing whitespace, conflict markers, missing final newlines. |
 | `license` | Every source file must carry a licence header. |
@@ -227,6 +235,33 @@ never replaced without `--force` and never deleted at all.
 | `rust-unsafe` | No `unsafe` blocks in production code. |
 | `rust-panic` | No `unwrap` / `expect` / `panic!` in production code. |
 | `rust-msrv` | The declared `rust-version` must be a supported release. |
+
+### Rhai and MoonBit
+
+`rhai-check` compiles the sources with the real Rhai compiler and calls the
+functions a JSON case file declares, inside a sandbox with an explicit
+operation budget. Rhai's debugger reports every executable line, and a
+semantics-preserving probe around each `if`, `while` and `do ... while` guard
+records both outcomes — the file on disk is never rewritten.
+
+```sh
+devine-utils-ci rhai-check --src examples/kernel \
+  --cases tests/kernel-cases.json --output json \
+  --line-threshold 90 --branch-threshold 90 \
+  --complexity-warn 12 --max-complexity 18
+```
+
+`moonbit-check` drives `moon check --json`, `moon fmt --check`, `moon test`
+and, when tests exist, `moon coverage report -f cobertura`. It requires a
+`moon.mod` at or above `--src`: a missing module is a finding, not a
+silently empty run. MoonBit's toolchain reports line coverage and no branch
+outcomes, so the payload marks branch coverage unsupported rather than
+inventing a percentage.
+
+```sh
+devine-utils-ci moonbit-check --src . --output json \
+  --line-threshold 90 --complexity-warn 12 --max-complexity 18
+```
 
 ### Toolchain
 
