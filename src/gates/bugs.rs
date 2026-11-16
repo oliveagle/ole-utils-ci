@@ -22,7 +22,10 @@ use crate::static_regex;
 pub const MARKERS: [&str; 4] = ["BUG", "FIXME", "HACK", "XXX"]; //nolint:bugs
 
 /// Extensions the gate scans.
-const SCANNED_EXTENSIONS: [&str; 2] = [".go", ".rs"];
+///
+/// Every language the tool has a group for is scanned: a marker left in a
+/// Python or Mojo file is the same debt as one left in a Go file.
+const SCANNED_EXTENSIONS: [&str; 6] = [".go", ".rs", ".py", ".pyi", ".mojo", ".🔥"];
 
 /// One marker found in a source file.
 #[derive(Debug, Clone, PartialEq, Eq)]

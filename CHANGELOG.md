@@ -1,3 +1,65 @@
+## [0.16.0] — 2026-11-16
+
+### Added
+
+- **Python.** A `python` group with nine commands. Six of them drive the
+  project's own tools — `python-lint` (`ruff check`), `python-format`
+  (`ruff format --check --diff`), `python-typecheck` (`mypy`),
+  `python-test` (`python3 -m pytest`, plus the JUnit XML report),
+  `python-coverage` (`pytest --cov --cov-fail-under` against
+  `--coverage-threshold`) and `python-build` (`python3 -m build`) — and
+  the other two read the sources and need no interpreter at all:
+  `python-no-shell-exec` (no `os.system`, `os.popen`, `shell=True` or
+  `subprocess.getoutput`) and `python-deps` (`requirements*.txt` entries
+  must pin with `==`).
+- **Mojo.** A `mojo` group: `mojo-format`, `mojo-build`, `mojo-test`,
+  `mojo-package` and `mojo-doc` through the `mojo` CLI, plus
+  `mojo-unsafe`, which reads the sources for `unsafe_*` identifiers.
+  `.🔥` is read as a Mojo source everywhere, next to `.mojo`.
+- **A gate whose tool never ran is an error, never a pass.** Every
+  toolchain gate above looks its tool up on `PATH`, takes `--tool` /
+  `--interpreter` overrides, and says which install line to follow when it
+  cannot find it. `--dry-run` still answers without the tool, so a
+  machine with no Python or Mojo can see the plan.
+- `python all` and `mojo all` run their group's gates in order and stop at
+  the first failure, like every other `all`; on a project that is neither,
+  they print that and exit 0. `ole-utils-python` and `ole-utils-mojo` run
+  the groups without naming them.
+- The shared gates read the new languages too: `bugs`, `license` and
+  `file-length` accept `.py`, `.pyi`, `.mojo` and `.🔥`, and
+  `complexity` counts Python and Mojo source.
+
+### Fixed
+
+- **The Mojo gates drive the CLI that exists.** They were written against a
+  `mojo` that has no check mode to run, one input per command, and a `test`
+  subcommand — none of which is true of the toolchain (1.2) they are meant to
+  drive: `format --check` is an unrecognised argument, `build` and `doc`
+  answer "too many input files" for any project with two sources, `package`
+  takes a directory and is called `precompile`, and `test` is not a command.
+  Each gate now asks for the shape the tool accepts: the formatter runs on a
+  scratch copy that is compared and discarded (the project is never written to),
+  the compiler runs once per file declaring a `main`, the runner runs once per
+  test file (`test_*.mojo` or `*_test.mojo`), and packaging and docs take one
+  package directory each.
+- **`.🔥` is reported, not passed to the toolchain.** The CLI stopped
+  accepting the extension (`Extension no longer supported`), so a source that
+  still carries it is named along with the rename, and a project whose only
+  sources use it fails instead of passing unread.
+- **`python all` runs coverage.** It was the one gate of the group the
+  aggregate skipped, which made the threshold a number nobody's CI checked.
+- **The Python group takes one flag per tool.** `--tool` named a single binary
+  and was handed to all three programs the group drives, so
+  `python all --tool ./venv/bin/ruff` ran the type checker with ruff and failed
+  on `--no-error-summary`. `--ruff`, `--mypy` and `--interpreter` each name
+  their own; the aggregate refuses `--tool` instead of misrouting it.
+- **`<group> all` keeps the flags it was given.** The aggregate re-dispatched
+  every gate with default options, so `mojo all --tool …` looked for `mojo` on
+  `PATH` and `python all --interpreter …` ran `python3`. Both are threaded
+  through now.
+- `rust all`, `python all` and `mojo all` no longer print a header around a
+  run that already printed one per gate, nor the same verdict twice.
+
 ## [0.15.0] — 2026-11-14
 
 ### Changed

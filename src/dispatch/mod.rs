@@ -7,7 +7,7 @@
 //!
 //! The table has two layers. The flat layer is the command surface the Go
 //! original had. The language layer sits in front of it: `rust`, `golang`,
-//! `tengo`, `proto`, `web` and `common` group the flat commands by the
+//! `tengo`, `proto`, `web`, `python`, `mojo` and `common` group the flat commands by the
 //! language they gate and forward to them (see [`crate::languages`]).
 
 mod flat;
@@ -61,6 +61,17 @@ pub(crate) fn dispatch_flat(command: &str, args: &[String]) -> Result<i32, Strin
     if commands::rust::COMMANDS.contains(&command) {
         commands::rust::parse(&mut cfg, args)?;
         return commands::rust::run(command, &cfg);
+    }
+    // The two scripting-language groups own flags the shared parser must not
+    // see — which tool to run, and what to run it over — so each parses its
+    // own line and carries the result into the gate it picked.
+    if commands::python::COMMANDS.contains(&command) {
+        let opts = commands::python::parse(&mut cfg, args)?;
+        return commands::python::run(command, &cfg, &opts);
+    }
+    if commands::mojo::COMMANDS.contains(&command) {
+        let opts = commands::mojo::parse(&mut cfg, args)?;
+        return commands::mojo::run(command, &cfg, &opts);
     }
     match command {
         "install" => with_config(commands::toolchain::install, &mut cfg, args),

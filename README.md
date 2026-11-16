@@ -29,8 +29,8 @@ The release profile is tuned for shipping: thin LTO, one codegen unit,
 Installing the package installs the language-scoped binaries as well:
 `ole-utils-ci` (the whole tool under the repository's name) plus one binary
 per language group — `ole-utils-golang`, `ole-utils-rust`,
-`ole-utils-tengo`, `ole-utils-proto`, `ole-utils-web` and
-`ole-utils-common`. See [Language groups](#language-groups).
+`ole-utils-python`, `ole-utils-mojo`, `ole-utils-tengo`, `ole-utils-proto`,
+`ole-utils-web` and `ole-utils-common`. See [Language groups](#language-groups).
 
 
 ## Quick start
@@ -103,17 +103,23 @@ languages can be driven one language at a time:
 devine-utils-ci golang test        # same as `devine-utils-ci test`
 devine-utils-ci rust clippy        # same as `devine-utils-ci rust-clippy`
 devine-utils-ci tengo test         # same as `devine-utils-ci tengo-test`
+devine-utils-ci python test        # same as `devine-utils-ci python-test`
+devine-utils-ci mojo build         # same as `devine-utils-ci mojo-build`
 devine-utils-ci proto breaking     # same as `devine-utils-ci buf-breaking`
 devine-utils-ci common bugs        # same as `devine-utils-ci bugs`
 devine-utils-ci common hook status # same as `devine-utils-ci hook status`
 
 devine-utils-ci golang all         # every Go gate, in order
+devine-utils-ci python all         # every Python gate, in order
+devine-utils-ci mojo all           # every Mojo gate, in order
 ```
 
 | Group | Owns |
 |-------|------|
 | `golang` | `install`, `lint`, `test`, `build`, `coverage`, `branch-coverage`, `test-report`, `gomut`, `version-check`, `go-pin`, `no-shell-exec`, `plugin-freshness`, `goversion`, `package-size` |
 | `rust` | `rust`, `rust-fmt`, `rust-clippy`, `rust-test`, `rust-build`, `rust-doc`, `rust-audit`, `rust-manifest`, `rust-unsafe`, `rust-panic`, `rust-msrv` |
+| `python` | `python`, `python-lint`, `python-format`, `python-typecheck`, `python-test`, `python-coverage`, `python-build`, `python-no-shell-exec`, `python-deps` |
+| `mojo` | `mojo`, `mojo-format`, `mojo-build`, `mojo-test`, `mojo-package`, `mojo-doc`, `mojo-unsafe` |
 | `tengo` | `tengo-test`, `tengo-coverage`, `tengo-mutate` |
 | `proto` | `buf-lint`, `buf-breaking`, `buf-generate` |
 | `web` | `web-lint` |
@@ -125,6 +131,8 @@ typing the group name:
 ```sh
 ole-utils-golang test               # same as `devine-utils-ci golang test`
 ole-utils-rust all                  # every Rust gate, in order
+ole-utils-python lint              # same as `devine-utils-ci python lint`
+ole-utils-mojo all                  # every Mojo gate, in order
 ole-utils-tengo --help              # the commands of the group
 ```
 
@@ -132,6 +140,10 @@ A group runs nothing until you name a command: on its own it prints
 the commands it has and exits. `all` runs every gate of the group, in
 order, and stops at the first failure, exactly like `all` does. The flat
 commands keep working unchanged.
+
+"Every gate" means every gate: `python all` includes `python-coverage`, and
+`mojo all` includes `mojo-package` and `mojo-doc`. A gate only reachable by
+naming it by hand is a gate no CI job runs.
 
 ### Git hooks
 
@@ -230,6 +242,20 @@ never replaced without `--force` and never deleted at all.
 | `tengo-test` | Tengo tool unit tests with fake `call_tool` mocks. |
 | `tengo-coverage` | Tengo line + branch coverage gates. |
 | `tengo-mutate` | Tengo source mutation testing. |
+| `python-lint` | `ruff check` over the paths given (default: the project root). |
+| `python-format` | `ruff format --check --diff`. |
+| `python-typecheck` | `mypy`. |
+| `python-test` | `python3 -m pytest`, and a JUnit XML report. |
+| `python-coverage` | `pytest --cov --cov-fail-under` against `--coverage-threshold`. |
+| `python-build` | `python3 -m build`. |
+| `python-no-shell-exec` | No `os.system`, `os.popen`, `shell=True` or `subprocess.getoutput` in the sources. |
+| `python-deps` | `requirements*.txt` entries must pin with `==`. |
+| `mojo-format` | `mojo format` run on a scratch copy, then compared: the CLI has no check mode. |
+| `mojo-build` | `mojo build` once per file that declares a `main`, output to a scratch tree. |
+| `mojo-test` | `mojo run` once per test file: the CLI has no `test` command. |
+| `mojo-package` | `mojo precompile` once per package directory (a directory holding `__init__.mojo`). |
+| `mojo-doc` | `mojo doc` once per package directory, else once per module: `doc` takes one input. |
+| `mojo-unsafe` | No `unsafe_*` identifiers in the sources (`.mojo` and `.🔥`). |
 | `test-report` | JUnit XML report. |
 | `all` | The whole quality gate, in CI order. |
 
@@ -374,6 +400,24 @@ runs the default one (`devine-golang-mcp-app`). Every subcommand takes
 
 The whole Go command surface is implemented here. The parts of `pipeline-watch`
 that are still missing are listed above.
+
+Beyond the Go surface there are three self-contained language groups: `rust`,
+`python` and `mojo`. The Python and Mojo groups are the same shape: the
+source gates (`python-no-shell-exec`, `python-deps`, `mojo-unsafe`) read
+the files and need no toolchain, so they run anywhere; the toolchain gates
+drive the project's own tools and **fail — never pass — when the tool is
+missing**, because a gate whose tool never ran proves nothing.
+
+The Mojo gates are written against the CLI that ships today (1.2): `format`
+has no check mode, `build` and `doc` take exactly one input, `package` is
+`precompile` and takes one package directory, and there is no `test`
+subcommand at all — a test is a file you run. Each gate therefore asks the
+tool for the one shape it accepts, and writes nothing into the project.
+
+The Python group drives three programs, so it takes three flags: `--ruff`
+(lint and format), `--mypy` (typecheck) and `--interpreter` (test, coverage
+and build). A single `--tool` still names the binary of whichever gate you
+ran; the aggregate refuses it rather than handing one binary to all three.
 
 Every command accepts `--output json` or `--output toon` where it reports
 findings, and every command exits `0` on success, `1` on a failed check or an
