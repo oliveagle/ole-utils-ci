@@ -55,8 +55,8 @@ pub fn default_profiles() -> BTreeMap<&'static str, LineLimit> {
 pub fn profile_for_extension(ext: &str) -> Option<&'static str> {
     Some(match ext {
         ".go" | ".proto" | ".ts" | ".tsx" | ".mts" | ".cts" | ".js" | ".jsx" | ".mjs" | ".cjs"
-        | ".rs" | ".py" | ".java" | ".kt" | ".swift" | ".cs" | ".c" | ".h" | ".cc" | ".cpp"
-        | ".hpp" | ".tengo" => "source",
+        | ".rs" | ".py" | ".pyi" | ".mojo" | ".🔥" | ".java" | ".kt" | ".swift" | ".cs" | ".c"
+        | ".h" | ".cc" | ".cpp" | ".hpp" | ".tengo" => "source",
         ".sh" | ".bash" | ".zsh" | ".ps1" | ".psm1" => "script",
         ".html" | ".htm" | ".vue" | ".svelte" => "html",
         ".yaml" | ".yml" | ".json" | ".jsonc" | ".css" | ".scss" | ".less" | ".sql" => {

@@ -9,6 +9,7 @@
 //! Rust is covered alongside Go, Tengo, TypeScript and JavaScript.
 
 pub mod lang;
+pub mod python;
 pub mod scanners;
 
 use crate::config::{limits, Config};
@@ -106,6 +107,12 @@ fn reported_languages(root: &std::path::Path) -> Vec<&'static str> {
     let mut languages = lang::LANGUAGES.to_vec();
     if root.join("Cargo.toml").is_file() {
         languages.push(lang::RUST_LANGUAGE);
+    }
+    if crate::commands::python::is_project(root) {
+        languages.push("python");
+    }
+    if crate::commands::mojo::is_project(root) {
+        languages.push("mojo");
     }
     languages
 }

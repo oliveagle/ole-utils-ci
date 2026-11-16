@@ -1,6 +1,6 @@
 [package]
 name = "devine-utils-ci"
-version = "0.15.0"
+version = "0.16.0"
 edition = "2021"
 rust-version = "1.85"
 description = "Unified CI quality-gate tool — Rust rewrite of devine-utils-ci"
@@ -38,6 +38,14 @@ path = "src/bin/ole_utils_proto.rs"
 [[bin]]
 name = "ole-utils-web"
 path = "src/bin/ole_utils_web.rs"
+
+[[bin]]
+name = "ole-utils-python"
+path = "src/bin/ole_utils_python.rs"
+
+[[bin]]
+name = "ole-utils-mojo"
+path = "src/bin/ole_utils_mojo.rs"
 
 [[bin]]
 name = "ole-utils-common"

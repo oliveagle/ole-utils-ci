@@ -42,12 +42,26 @@ fn the_flat_command_names_are_unique() {
 }
 
 #[test]
-fn only_the_rust_group_owns_a_flat_command_name() {
-    // `rust` is the one group whose name is also a flat command: the flat
-    // one wins when the caller does not name a subcommand.
+fn only_a_group_with_its_own_aggregate_owns_a_flat_command_name() {
+    // A group named like a flat command shadows it: the group wins whenever
+    // the caller does not name a subcommand. That is allowed only for the
+    // groups whose `all` is the flat command itself, so the shadowed name is
+    // still reachable — `rust all`, `python all`, `mojo all`.
     for lang in crate::languages::LANGUAGES {
         if has_flat_command(lang.name) {
-            assert_eq!(lang.name, "rust", "{} shadows a flat command", lang.name);
+            assert_eq!(
+                lang.aggregate_commands(),
+                [lang.name],
+                "{} shadows a flat command and cannot reach it",
+                lang.name
+            );
         }
     }
+    // At least one group is in that position, or the rule above proves nothing.
+    assert!(
+        crate::languages::LANGUAGES
+            .iter()
+            .any(|lang| has_flat_command(lang.name)),
+        "no group shares a name with a flat command"
+    );
 }

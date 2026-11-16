@@ -13,8 +13,9 @@ use crate::gates::GateResult;
 use crate::output::{Diagnostic, Report};
 
 /// Extensions that must carry a licence header.
-const SCANNED_EXTENSIONS: [&str; 10] = [
-    ".go", ".proto", ".ts", ".tsx", ".rs", ".py", ".java", ".kt", ".swift", ".sh",
+const SCANNED_EXTENSIONS: [&str; 13] = [
+    ".go", ".proto", ".ts", ".tsx", ".rs", ".py", ".pyi", ".mojo", ".🔥", ".java", ".kt", ".swift",
+    ".sh",
 ];
 
 /// Directories that are never inspected.

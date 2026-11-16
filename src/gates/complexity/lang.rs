@@ -42,18 +42,24 @@ pub fn language_for_extension(ext: &str) -> Option<&'static str> {
         ".tengo" => "tengo",
         ".ts" | ".tsx" | ".mts" | ".cts" => "ts",
         ".js" | ".jsx" | ".mjs" | ".cjs" => "js",
+        ".py" | ".pyi" => "python",
+        ".mojo" | ".🔥" => "mojo",
         _ => return None,
     })
 }
 
 /// Scans one source file and returns the complexity of each function in it.
 pub fn scan_file(path: &str, source: &str, language: &str) -> Vec<FunctionMetric> {
+    use super::python::scan_python;
     use super::scanners::{scan_go, scan_rust, scan_script};
     match language {
         "rust" => scan_rust(path, source),
         "go" => scan_go(path, source),
         "ts" | "js" => scan_script(path, source, language),
         "tengo" => scan_script(path, source, "tengo"),
+        // Mojo is Python-shaped where this gate can see: indented blocks made
+        // of statements, with `def` starting a function.
+        "python" | "mojo" => scan_python(path, source, language),
         _ => Vec::new(),
     }
 }

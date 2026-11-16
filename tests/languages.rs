@@ -51,7 +51,9 @@ fn a_group_lists_its_own_commands() {
 
 #[test]
 fn every_group_has_a_help_block() {
-    for group in ["golang", "rust", "tengo", "proto", "web", "common"] {
+    for group in [
+        "golang", "rust", "tengo", "proto", "web", "python", "mojo", "common",
+    ] {
         let (code, stdout, stderr) = main_binary(&[group, "--help"]);
         assert_eq!(code, 0, "{group}: stderr: {stderr}");
         assert!(
@@ -134,7 +136,9 @@ fn the_alias_binary_runs_the_whole_tool() {
 
 #[test]
 fn a_group_without_a_command_prints_help_and_runs_nothing() {
-    for group in ["golang", "rust", "tengo", "proto", "web", "common"] {
+    for group in [
+        "golang", "rust", "tengo", "proto", "web", "python", "mojo", "common",
+    ] {
         let (code, stdout, stderr) = main_binary(&[group]);
         assert_eq!(code, 1, "{group}: stdout: {stdout}");
         assert!(
@@ -193,4 +197,46 @@ fn a_group_with_only_flags_prints_help_and_runs_nothing() {
     assert!(stdout.contains("Commands:"), "stdout: {stdout}");
     assert!(!stdout.contains("── "), "a gate ran: {stdout}");
     assert!(stderr.is_empty(), "stderr: {stderr}");
+}
+
+/// Builds a throwaway Python project holding one source and one requirements
+/// file — the project shape the language-agnostic gates have to recognise.
+fn py_fixture(source: &str, requirements: &str) -> TempDir {
+    let dir = tempfile::tempdir().expect("temp dir");
+    std::fs::write(
+        dir.path().join("pyproject.toml"),
+        "[project]\nname = \"fixture\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("pyproject write");
+    std::fs::write(dir.path().join("app.py"), source).expect("source write");
+    std::fs::write(dir.path().join("requirements.txt"), requirements).expect("requirements write");
+    dir
+}
+
+#[test]
+fn the_common_gates_read_the_new_source_extensions() {
+    // The language-agnostic gates are only language-agnostic if they can see
+    // the file: a marker comment in a Python file and a missing licence header
+    // on a Mojo file are the same findings as they would be in Go or Rust.
+    //
+    // The marker is spelled at run time on purpose: this very file is read by
+    // the gate it exercises, so a literal one here would be a finding of its
+    // own.
+    let marker = format!("{}ME", "FIX");
+    let dir = py_fixture(&format!("# {marker}: debt\nx = 1\n"), "requests==2.31.0\n");
+    std::fs::write(dir.path().join("main.mojo"), "fn main():\n    print(1)\n").expect("mojo write");
+    let root = dir.path().to_string_lossy().into_owned();
+
+    let (code, stdout, _) = main_binary(&["bugs", "--project-root", &root, "--output", "json"]);
+    assert_eq!(code, 1, "stdout: {stdout}");
+    assert!(stdout.contains("app.py"), "stdout: {stdout}");
+
+    // The findings of a text-mode gate are its `Error:` lines, which Go's
+    // renderer writes to standard error; standard out carries the body.
+    let (code, stdout, stderr) = main_binary(&["license", "--project-root", &root]);
+    assert_eq!(code, 1, "stdout: {stdout} stderr: {stderr}");
+    assert!(
+        stderr.contains("main.mojo"),
+        "stderr: {stderr} stdout: {stdout}"
+    );
 }

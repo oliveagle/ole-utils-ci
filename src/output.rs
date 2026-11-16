@@ -182,6 +182,12 @@ impl Diagnostic {
         self.line = line;
         self
     }
+
+    /// Attaches a 1-based column number.
+    pub fn at_col(mut self, col: usize) -> Self {
+        self.col = col;
+        self
+    }
 }
 
 /// Tally of findings by severity.

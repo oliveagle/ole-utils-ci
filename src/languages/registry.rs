@@ -170,6 +170,72 @@ pub const LANGUAGES: &[Language] = &[
         aggregate: &["web-lint"],
     },
     Language {
+        name: "python",
+        title: "Python",
+        summary: "The Python gates: ruff, mypy, pytest and the build, plus the source gates.",
+        commands: &[
+            ("lint", "python-lint", "Run ruff over the sources."),
+            (
+                "format",
+                "python-format",
+                "Check the layout with ruff format --check.",
+            ),
+            (
+                "typecheck",
+                "python-typecheck",
+                "Type-check the sources with mypy.",
+            ),
+            ("test", "python-test", "Run the test suite with pytest."),
+            (
+                "coverage",
+                "python-coverage",
+                "Run pytest with the line-coverage floor.",
+            ),
+            ("build", "python-build", "Build the sdist and the wheel."),
+            (
+                "no-shell-exec",
+                "python-no-shell-exec",
+                "Reject code that hands a string to a shell.",
+            ),
+            (
+                "deps",
+                "python-deps",
+                "Reject requirements that do not pin a version.",
+            ),
+        ],
+        aggregate: &["python"],
+    },
+    Language {
+        name: "mojo",
+        title: "Mojo",
+        summary: "The Mojo gates: format, build, test, package, doc and the safety gate.",
+        commands: &[
+            (
+                "format",
+                "mojo-format",
+                "Check the layout with mojo format --check.",
+            ),
+            (
+                "build",
+                "mojo-build",
+                "Compile the sources with mojo build.",
+            ),
+            ("test", "mojo-test", "Run the tests with mojo test."),
+            (
+                "package",
+                "mojo-package",
+                "Build the .mojopkg with mojo package.",
+            ),
+            ("doc", "mojo-doc", "Generate the API docs with mojo doc."),
+            (
+                "unsafe",
+                "mojo-unsafe",
+                "Reject unsafe_* calls in production sources.",
+            ),
+        ],
+        aggregate: &["mojo"],
+    },
+    Language {
         name: "common",
         title: "Common",
         summary: "The language-agnostic gates every project runs.",

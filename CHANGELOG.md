@@ -1,3 +1,34 @@
+## [0.16.0] — 2026-11-16
+
+### Added
+
+- **Python.** A `python` group with nine commands. Six of them drive the
+  project's own tools — `python-lint` (`ruff check`), `python-format`
+  (`ruff format --check --diff`), `python-typecheck` (`mypy`),
+  `python-test` (`python3 -m pytest`, plus the JUnit XML report),
+  `python-coverage` (`pytest --cov --cov-fail-under` against
+  `--coverage-threshold`) and `python-build` (`python3 -m build`) — and
+  the other two read the sources and need no interpreter at all:
+  `python-no-shell-exec` (no `os.system`, `os.popen`, `shell=True` or
+  `subprocess.getoutput`) and `python-deps` (`requirements*.txt` entries
+  must pin with `==`).
+- **Mojo.** A `mojo` group: `mojo-format`, `mojo-build`, `mojo-test`,
+  `mojo-package` and `mojo-doc` through the `mojo` CLI, plus
+  `mojo-unsafe`, which reads the sources for `unsafe_*` identifiers.
+  `.🔥` is read as a Mojo source everywhere, next to `.mojo`.
+- **A gate whose tool never ran is an error, never a pass.** Every
+  toolchain gate above looks its tool up on `PATH`, takes `--tool` /
+  `--interpreter` overrides, and says which install line to follow when it
+  cannot find it. `--dry-run` still answers without the tool, so a
+  machine with no Python or Mojo can see the plan.
+- `python all` and `mojo all` run their group's gates in order and stop at
+  the first failure, like every other `all`; on a project that is neither,
+  they print that and exit 0. `ole-utils-python` and `ole-utils-mojo` run
+  the groups without naming them.
+- The shared gates read the new languages too: `bugs`, `license` and
+  `file-length` accept `.py`, `.pyi`, `.mojo` and `.🔥`, and
+  `complexity` counts Python and Mojo source.
+
 ## [0.15.0] — 2026-11-14
 
 ### Changed
