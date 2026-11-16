@@ -195,6 +195,22 @@ Rust gates (added by this build; the Go tool has none of them):
   rust-panic           No unwrap / expect / panic! in production code.
   rust-msrv            The declared MSRV must be supported.
 
+Python and Mojo gates (added by this build; the Go tool has none of them):
+  python-lint          ruff check.
+  python-format        ruff format --check --diff.
+  python-typecheck     mypy.
+  python-test          pytest, plus the JUnit XML report.
+  python-coverage      pytest --cov, against --coverage-threshold.
+  python-build         python3 -m build.
+  python-no-shell-exec No os.system, os.popen, shell=True or getoutput.
+  python-deps          A requirements*.txt entry must pin with ==.
+  mojo-format          mojo format on a copy, then compared.
+  mojo-build           mojo build, once per file that declares a main.
+  mojo-test            mojo run, once per test file.
+  mojo-package         mojo precompile, once per package directory.
+  mojo-doc             mojo doc, once per package directory or module.
+  mojo-unsafe          No unsafe_* identifiers in the sources.
+
 Flags the Go usage block leaves out:
   --dry-run, -n        Print what would change without changing anything.
   --ts, --timestamp    Prefix every output line with a timestamp. The flag
@@ -210,6 +226,8 @@ Language groups (the same commands, grouped by the language they gate):
   tengo    The Tengo tool gates: unit tests, coverage and mutation testing.
   proto    The protobuf gates: buf lint, breaking changes and code generation.
   web      The web gate: HTML, CSS, JavaScript and TypeScript.
+  python   The Python gates: ruff, mypy, pytest, and the source gates.
+  mojo     The Mojo gates: format, build, test, package, doc and safety.
   common   The language-agnostic gates every project runs.
 
   devine-utils-ci golang test        # same as devine-utils-ci test
@@ -227,6 +245,8 @@ Standalone per-language binaries (the same behaviour, shorter name):
   ole-utils-tengo   the tengo group
   ole-utils-proto   the proto group
   ole-utils-web     the web group
+  ole-utils-python  the python group
+  ole-utils-mojo    the mojo group
   ole-utils-common  the common group
 "#;
 
