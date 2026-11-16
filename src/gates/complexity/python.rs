@@ -72,9 +72,10 @@ fn indent_of(line: &str) -> usize {
 
 /// The name and indentation of a function header, when `line` is one.
 ///
-/// Python spells it `def` (and `async def`); Mojo spells it `fn`, and also
-/// accepts `def`. Both open a block with a colon and indentation, which is the
-/// only thing this scanner needs.
+/// Python spells it `def` (and `async def`); Mojo 1.2 spells it `def` too —
+/// `fn` is the spelling Mojo used to have, and is still accepted here so that a
+/// source written for the older toolchain is still counted. Both open a block
+/// with a colon and indentation, which is the only thing this scanner needs.
 fn code_def(line: &str, allow_fn: bool) -> Option<(String, usize)> {
     let indent = indent_of(line);
     let rest = line.trim_start();
